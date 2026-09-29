@@ -1,0 +1,33 @@
+{
+  "name": "edplatform-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready AI Education Platform (EDplatform)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "education",
+    "ai",
+    "nextjs",
+    "express",
+    "prisma",
+    "gemini"
+  ],
+  "author": "EDplatform Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
+    "eslint": "^9.39.5"
+  }
+}
