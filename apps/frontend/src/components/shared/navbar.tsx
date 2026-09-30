@@ -2,11 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sparkles, Moon, Sun, BookOpen, Compass, GraduationCap } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Sparkles, Moon, Sun, BookOpen, Compass, GraduationCap, LogOut, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/context/auth-context';
 
 export function Navbar() {
   const [isDark, setIsDark] = useState(false);
+  const { user, logout, isLoading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     // Check initial dark mode from DOM or user preference
@@ -26,6 +31,11 @@ export function Navbar() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
   };
 
   return (
@@ -80,15 +90,56 @@ export function Navbar() {
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <Link href="/login">
-            <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
-              Sign In
-            </Button>
-          </Link>
+          {isLoading ? (
+            <div className="h-8 w-20 rounded-md bg-muted animate-pulse" />
+          ) : user ? (
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Link href="/dashboard">
+                <Button variant="outline" size="sm" className="hidden sm:inline-flex items-center space-x-1.5">
+                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  <span>Dashboard</span>
+                </Button>
+              </Link>
 
-          <Link href="/register">
-            <Button size="sm">Get Started</Button>
-          </Link>
+              <div className="flex items-center space-x-2 pl-1 border-l border-border/60">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                  {user.firstName[0]?.toUpperCase()}
+                  {user.lastName[0]?.toUpperCase()}
+                </div>
+                <div className="hidden lg:flex flex-col text-left">
+                  <span className="text-xs font-medium text-foreground leading-none">
+                    {user.firstName} {user.lastName}
+                  </span>
+                  <Badge variant="outline" className="mt-1 text-[10px] px-1 py-0 h-4 w-fit">
+                    {user.role}
+                  </Badge>
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                title="Sign out"
+                aria-label="Sign out"
+                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
+                  Sign In
+                </Button>
+              </Link>
+
+              <Link href="/register">
+                <Button size="sm">Get Started</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>

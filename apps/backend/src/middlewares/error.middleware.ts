@@ -1,23 +1,58 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { env } from '../config/env.config.js';
-
-export interface CustomError extends Error {
-  statusCode?: number;
-  code?: string;
-  details?: unknown;
-}
+import { AppError } from '../errors/app.error.js';
 
 export function errorHandler(
-  err: CustomError,
+  err: Error | AppError | ZodError,
   req: Request,
   res: Response,
   _next: NextFunction
 ): void {
-  const statusCode = err.statusCode || 500;
-  const errorCode = err.code || 'INTERNAL_SERVER_ERROR';
-  const message = err.message || 'An unexpected server error occurred';
+  // Resilient check for Zod validation errors
+  const isZod =
+    err instanceof ZodError ||
+    (Boolean(err) && typeof err === 'object' && ('issues' in (err as object) || (err as Error).name === 'ZodError'));
 
-  if (env.NODE_ENV !== 'test') {
+  if (isZod) {
+    const zodErr = err as ZodError;
+    const issues = zodErr.issues || zodErr.errors || [];
+    const details = issues.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message
+    }));
+
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Validation error',
+        details
+      }
+    });
+    return;
+  }
+
+  // Handle AppError and standard errors
+  const isAppError = err instanceof AppError;
+  const statusCode =
+    'statusCode' in err && typeof err.statusCode === 'number'
+      ? err.statusCode
+      : isAppError
+      ? err.statusCode
+      : 500;
+
+  const errorCode =
+    'code' in err && typeof err.code === 'string'
+      ? err.code
+      : isAppError
+      ? err.code
+      : 'INTERNAL_SERVER_ERROR';
+
+  const message = err.message || 'An unexpected server error occurred';
+  const details = 'details' in err ? err.details : undefined;
+
+  if (env.NODE_ENV !== 'test' && statusCode >= 500) {
     console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err);
   }
 
@@ -26,7 +61,7 @@ export function errorHandler(
     error: {
       code: errorCode,
       message,
-      details: err.details || undefined,
+      details: details || undefined,
       ...(env.NODE_ENV === 'development' && { stack: err.stack })
     }
   });

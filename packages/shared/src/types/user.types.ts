@@ -16,3 +16,13 @@ export interface SafeUser {
 export interface AuthSession {
   user: SafeUser;
 }
+
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface AuthResponse {
+  user: SafeUser;
+}
