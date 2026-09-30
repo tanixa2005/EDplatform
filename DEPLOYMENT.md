@@ -111,18 +111,24 @@ npx prisma migrate status --schema=apps/backend/prisma/schema.prisma
 
 When deploying `apps/frontend` to **Vercel**:
 
-1. **New Project Setup**:
+1. **Project Configuration**:
    - Import the Git repository in Vercel.
    - Set **Root Directory** to `apps/frontend`.
-2. **Framework Preset**:
-   - Vercel will automatically detect **Next.js**.
-3. **Build & Development Settings**:
-   - Build Command: `cd ../.. && npm run build --workspace=@edplatform/frontend` (or standard `next build` if monorepo dependencies are configured).
-   - Output Directory: `.next`
-   - Install Command: `npm install` (from monorepo root)
-4. **Environment Variables**:
+   - Vercel will detect the npm monorepo and automatically install dependencies from the repository root.
+
+2. **Framework Preset & Build Commands**:
+   - **Framework Preset**: Next.js
+   - **Install Command**: `npm install` (default). No backend Prisma generation is triggered because root `postinstall` is decoupled.
+   - **Build Command**: `next build` or `npm run build` (default). `apps/frontend/package.json` includes `"prebuild": "npm run build --workspace=@edplatform/shared"`, which builds the shared schema contract package before Next.js compiles.
+   - **Output Directory**: `.next` (default).
+
+3. **Required Environment Variables**:
    - `NEXT_PUBLIC_API_URL`: Set to your live backend API URL (e.g. `https://api.edplatform.com/api/v1`).
    - `NEXT_PUBLIC_APP_URL`: Set to your live frontend URL (e.g. `https://edplatform.com`).
+
+4. **Zero Backend Secrets on Vercel**:
+   - Vercel **does not** require `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any backend secrets.
+   - Prisma Client generation is decoupled and executed strictly in backend deployment pipelines (e.g., Render/Railway/Fly.io).
 
 ---
 

@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "prebuild": "npm run build --workspace=@edplatform/shared",
     "build": "next build",
     "start": "next start -p 3000",
+    "pretypecheck": "npm run build --workspace=@edplatform/shared",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
   },
