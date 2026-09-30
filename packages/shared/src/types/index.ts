@@ -4,3 +4,4 @@ export * from './progress.types.js';
 export * from './api.types.js';
 export * from './quiz.types.js';
 export * from './ai.types.js';
+export * from './dashboard.types.js';
