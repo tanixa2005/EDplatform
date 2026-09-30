@@ -15,13 +15,15 @@ import {
   Award,
   Clock,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { fetchApi } from '@/lib/api';
 import { useAuth } from '@/context/auth-context';
+import { AITutorDrawer } from '@/components/ai/ai-tutor-drawer';
 
 interface PlaybackDetails {
   type: string;
@@ -94,6 +96,7 @@ export default function LessonClassroomPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aiTutorOpen, setAiTutorOpen] = useState(false);
 
   // Interval tracking state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -305,6 +308,16 @@ export default function LessonClassroomPage({
           </div>
 
           <div className="flex items-center space-x-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setAiTutorOpen(true)}
+              className="text-xs flex items-center space-x-1.5 shadow-sm"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>AI Tutor</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -535,6 +548,14 @@ export default function LessonClassroomPage({
           ))}
         </div>
       </aside>
+
+      <AITutorDrawer
+        isOpen={aiTutorOpen}
+        onClose={() => setAiTutorOpen(false)}
+        lessonId={lesson.id}
+        lessonTitle={lesson.title}
+        mode="study"
+      />
     </div>
   );
 }

@@ -55,3 +55,10 @@ export class ConflictError extends AppError {
     Object.setPrototypeOf(this, ConflictError.prototype);
   }
 }
+
+export class TooManyRequestsError extends AppError {
+  constructor(message = 'Too many requests. Please slow down and try again later.', code = 'RATE_LIMIT_EXCEEDED', details?: unknown) {
+    super(message, 429, code, details);
+    Object.setPrototypeOf(this, TooManyRequestsError.prototype);
+  }
+}

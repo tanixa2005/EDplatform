@@ -8,6 +8,7 @@ import { enrollmentRouter } from './enrollment.routes.js';
 import { quizRouter } from './quiz.routes.js';
 import { questionRouter } from './question.routes.js';
 import { attemptRouter } from './attempt.routes.js';
+import { aiRouter } from './ai.routes.js';
 
 export const apiRouter = Router();
 
@@ -21,3 +22,4 @@ apiRouter.use('/enrollments', enrollmentRouter);
 apiRouter.use('/quizzes', quizRouter);
 apiRouter.use('/questions', questionRouter);
 apiRouter.use('/attempts', attemptRouter);
+apiRouter.use('/ai', aiRouter);

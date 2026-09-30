@@ -10,7 +10,8 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertTriangle,
-  Play
+  Play,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Progress } from '@/components/ui/progress';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { fetchApi } from '@/lib/api';
+import { AITutorDrawer } from '@/components/ai/ai-tutor-drawer';
 import {
   QuizDetailStudentDto,
   QuizAttemptSummaryDto,
@@ -43,6 +45,7 @@ export default function QuizPlayerPage({
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aiTutorOpen, setAiTutorOpen] = useState(false);
 
   // Load quiz, history, and active attempt
   const loadQuizData = useCallback(async () => {
@@ -391,9 +394,20 @@ export default function QuizPlayerPage({
                           ? 'True / False'
                           : 'Single Choice'}
                       </Badge>
-                      <span className="text-xs text-muted-foreground font-semibold">
-                        {currentQuestion.points} {currentQuestion.points === 1 ? 'point' : 'points'}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-muted-foreground font-semibold">
+                          {currentQuestion.points} {currentQuestion.points === 1 ? 'point' : 'points'}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAiTutorOpen(true)}
+                          className="h-7 text-xs border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 space-x-1"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>AI Hint</span>
+                        </Button>
+                      </div>
                     </div>
 
                     <CardTitle className="text-lg sm:text-xl font-bold text-foreground leading-relaxed pt-1">
@@ -520,6 +534,16 @@ export default function QuizPlayerPage({
           )}
         </div>
       </div>
+
+      <AITutorDrawer
+        isOpen={aiTutorOpen}
+        onClose={() => setAiTutorOpen(false)}
+        lessonId={lessonId}
+        lessonTitle={quiz.title}
+        mode="quiz"
+        questionId={currentQuestion?.id}
+        questionPrompt={currentQuestion?.prompt}
+      />
     </ProtectedRoute>
   );
 }

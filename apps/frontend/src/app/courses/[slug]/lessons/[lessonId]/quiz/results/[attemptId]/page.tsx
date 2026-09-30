@@ -7,13 +7,15 @@ import {
   XCircle,
   ArrowLeft,
   RotateCcw,
-  Info
+  Info,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { fetchApi } from '@/lib/api';
+import { MistakeAnalysisModal } from '@/components/ai/mistake-analysis-modal';
 import { QuizAttemptResultDto } from '@edplatform/shared';
 
 export default function QuizResultPage({
@@ -27,6 +29,7 @@ export default function QuizResultPage({
   const [result, setResult] = useState<QuizAttemptResultDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
 
   useEffect(() => {
     async function loadResult() {
@@ -155,6 +158,17 @@ export default function QuizResultPage({
                   </div>
                 </div>
               </div>
+
+              {/* AI Diagnostic Trigger */}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Button
+                  onClick={() => setDiagnosticOpen(true)}
+                  className="space-x-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground shadow-md"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>Analyze My Mistakes with AI</span>
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -281,6 +295,12 @@ export default function QuizResultPage({
           </div>
         </div>
       </div>
+
+      <MistakeAnalysisModal
+        attemptId={attemptId}
+        isOpen={diagnosticOpen}
+        onClose={() => setDiagnosticOpen(false)}
+      />
     </ProtectedRoute>
   );
 }
