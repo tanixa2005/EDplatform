@@ -14,6 +14,13 @@ export class AppError extends Error {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message = 'Bad request', code = 'BAD_REQUEST', details?: unknown) {
+    super(message, 400, code, details);
+    Object.setPrototypeOf(this, BadRequestError.prototype);
+  }
+}
+
 export class ValidationError extends AppError {
   constructor(message = 'Validation failed', details?: unknown) {
     super(message, 400, 'VALIDATION_ERROR', details);

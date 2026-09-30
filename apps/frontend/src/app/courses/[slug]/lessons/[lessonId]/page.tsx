@@ -11,6 +11,8 @@ import {
   X,
   BookOpen,
   ArrowLeft,
+  ArrowRight,
+  Award,
   Clock,
   ShieldCheck,
   AlertCircle
@@ -82,6 +84,13 @@ export default function LessonClassroomPage({
 
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [progress, setProgress] = useState<LessonProgressRecord | null>(null);
+  const [lessonQuiz, setLessonQuiz] = useState<{
+    id: string;
+    title: string;
+    passingScore: number;
+    questionsCount: number;
+    timeLimitSeconds?: number | null;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -99,6 +108,18 @@ export default function LessonClassroomPage({
       setError(null);
       const data = await fetchApi<{ lesson: LessonDetail }>(`/lessons/${lessonId}`);
       setLesson(data.lesson);
+
+      // Check for lesson quiz
+      try {
+        const qData = await fetchApi<{ quiz: any }>(`/lessons/${lessonId}/quiz`);
+        if (qData?.quiz && qData.quiz.isPublished) {
+          setLessonQuiz(qData.quiz);
+        } else {
+          setLessonQuiz(null);
+        }
+      } catch {
+        setLessonQuiz(null);
+      }
 
       // Load progress if user is authenticated
       if (user) {
@@ -367,6 +388,38 @@ export default function LessonClassroomPage({
                   Watch at least 90% of this lesson to automatically achieve completion credit. Seeking directly to the end will not bypass verification.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Lesson Quiz Banner */}
+          {lessonQuiz && user && (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                  <Award className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-bold text-foreground">{lessonQuiz.title}</h3>
+                    <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                      {lessonQuiz.questionsCount} Questions
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Passing Score: {lessonQuiz.passingScore}%{' '}
+                    {lessonQuiz.timeLimitSeconds
+                      ? `\u2022 ${Math.round(lessonQuiz.timeLimitSeconds / 60)} min limit`
+                      : ''}
+                  </p>
+                </div>
+              </div>
+
+              <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.id}/quiz`}>
+                <Button size="sm" className="space-x-1.5 w-full sm:w-auto">
+                  <span>Take Lesson Quiz</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </div>
           )}
 

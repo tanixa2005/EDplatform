@@ -13,7 +13,8 @@ import {
   Layers,
   Clock,
   ExternalLink,
-  Save
+  Save,
+  Award
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -408,6 +409,18 @@ export default function CourseEditorPage({ params }: { params: Promise<{ id: str
                                   <span>{Math.round(lesson.videoDuration / 60)}m</span>
                                 </span>
                               ) : null}
+
+                              <Link href={`/instructor/lessons/${lesson.id}/quiz`}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] space-x-1"
+                                  title="Manage Quiz"
+                                >
+                                  <Award className="h-3 w-3 text-primary" />
+                                  <span>Quiz</span>
+                                </Button>
+                              </Link>
 
                               <Button
                                 variant="ghost"

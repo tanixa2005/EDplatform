@@ -208,12 +208,26 @@ model LessonProgress {
   @@index([lessonId])
 }
 
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
 model Quiz {
   id               String         @id @default(uuid())
   title            String
   description      String?        @db.Text
   passingScore     Int            @default(70)
   timeLimitMinutes Int?
+  timeLimitSeconds Int?
+  isPublished      Boolean        @default(false)
 
   moduleId         String?
   module           Module?        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -229,28 +243,34 @@ model Quiz {
 
   @@index([moduleId])
   @@index([lessonId])
+  @@index([isPublished])
 }
 
 model QuizQuestion {
-  id          String       @id @default(uuid())
-  prompt      String       @db.Text
-  explanation String?      @db.Text
-  sortOrder   Int          @default(0)
+  id          String         @id @default(uuid())
+  prompt      String         @db.Text
+  type        QuestionType   @default(SINGLE_CHOICE)
+  points      Int            @default(1)
+  explanation String?        @db.Text
+  sortOrder   Int            @default(0)
 
   quizId      String
-  quiz        Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz        Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   options     QuizOption[]
+  answers     QuizAnswer[]
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@index([quizId])
+  @@index([sortOrder])
 }
 
 model QuizOption {
   id         String       @id @default(uuid())
   text       String       @db.Text
+  sortOrder  Int          @default(0)
   isCorrect  Boolean      @default(false)
 
   questionId String
@@ -259,24 +279,53 @@ model QuizOption {
   createdAt  DateTime     @default(now())
 
   @@index([questionId])
+  @@index([sortOrder])
 }
 
 model QuizAttempt {
-  id          String   @id @default(uuid())
-  score       Int      // 0 - 100 percentage
-  isPassed    Boolean
-  answersJson Json     // Selected options map
-  aiFeedback  String?  @db.Text
+  id           String        @id @default(uuid())
+  score        Int           @default(0) // 0 - 100 percentage
+  earnedPoints Decimal       @default(0.00) @db.Decimal(6, 2)
+  totalPoints  Int           @default(0)
+  percentage   Decimal       @default(0.00) @db.Decimal(5, 2)
+  isPassed     Boolean       @default(false)
+  status       AttemptStatus @default(IN_PROGRESS)
+  startedAt    DateTime      @default(now())
+  submittedAt  DateTime?
+  answersJson  Json?         // Selected options snapshot map
+  aiFeedback   String?       @db.Text
 
-  userId      String
-  quizId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId       String
+  quizId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz         Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  answers      QuizAnswer[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @default(now()) @updatedAt
 
   @@index([userId])
   @@index([quizId])
+  @@index([status])
+}
+
+model QuizAnswer {
+  id                String       @id @default(uuid())
+  attemptId         String
+  attempt           QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  questionId        String
+  question          QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  selectedOptionIds Json         // Array of selected option IDs
+  isCorrect         Boolean      @default(false)
+  pointsAwarded     Decimal      @default(0.00) @db.Decimal(6, 2)
+  answeredAt        DateTime     @default(now())
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
 }
 
 model Certificate {
