@@ -16,10 +16,13 @@ export function createApp(): Express {
     })
   );
 
-  // CORS configuration
+  // CORS configuration (supports single origin or comma-separated list of allowed origins)
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean);
+  const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin: corsOrigin,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']

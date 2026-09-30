@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SafeUser, LoginInput, RegisterInput } from '@edplatform/shared';
+import { API_BASE_URL } from '@/lib/api';
 
 interface AuthContextType {
   user: SafeUser | null;
@@ -15,7 +16,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = API_BASE_URL;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SafeUser | null>(null);

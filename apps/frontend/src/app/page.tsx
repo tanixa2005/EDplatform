@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { API_BASE_URL } from '@/lib/api';
 
 interface HealthData {
   status: string;
@@ -31,8 +32,7 @@ export default function HomePage() {
   const [loadingHealth, setLoadingHealth] = useState(true);
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
-    fetch(`${apiUrl}/health`)
+    fetch(`${API_BASE_URL}/health`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
