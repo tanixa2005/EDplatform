@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AITutorMode } from '@edplatform/shared';
-import { API_BASE_URL } from '@/lib/api';
+import { getApiUrl } from '@/lib/api';
 
 interface Message {
   role: 'user' | 'model';
@@ -99,7 +99,7 @@ Ask me anything about the concepts, ask for code walkthroughs, mathematical form
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/tutor/stream`, {
+      const response = await fetch(getApiUrl('/ai/tutor/stream'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

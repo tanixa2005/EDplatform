@@ -16,7 +16,17 @@ export function getAuthCookieOptions(customMaxAgeMs?: number): CookieOptions {
 
   // SameSite: 'lax' provides good CSRF protection while permitting top-level navigation.
   // Can be configured to 'none' if API and frontend are on completely separate domains with HTTPS.
-  const sameSite: 'lax' | 'strict' | 'none' = env.COOKIE_SAME_SITE;
+  let sameSite: 'lax' | 'strict' | 'none' = env.COOKIE_SAME_SITE;
+
+  // In production with cross-origin deployments (e.g. Vercel frontend + Render backend on different domains),
+  // cookies MUST use SameSite=none and Secure=true; otherwise browsers block cookies on cross-origin fetch().
+  // If COOKIE_SAME_SITE was not explicitly set in process.env, default to 'none' in production.
+  if (isProduction && !process.env.COOKIE_SAME_SITE) {
+    sameSite = 'none';
+  }
+
+  // SameSite=none strictly requires Secure=true in all modern browsers (RFC 6265bis)
+  const effectiveSecure = sameSite === 'none' ? true : secure;
 
   // Domain: Leave undefined for host-only cookies (e.g., localhost), or set for shared subdomains
   const domain = env.COOKIE_DOMAIN || undefined;
@@ -26,7 +36,7 @@ export function getAuthCookieOptions(customMaxAgeMs?: number): CookieOptions {
 
   return {
     httpOnly: true, // Prevents client-side scripts from reading the cookie
-    secure,
+    secure: effectiveSecure,
     sameSite,
     domain,
     path: '/',

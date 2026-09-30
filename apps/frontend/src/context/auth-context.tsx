@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SafeUser, LoginInput, RegisterInput } from '@edplatform/shared';
-import { API_BASE_URL } from '@/lib/api';
+import { getApiUrl } from '@/lib/api';
 
 interface AuthContextType {
   user: SafeUser | null;
@@ -16,8 +16,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = API_BASE_URL;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SafeUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,7 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchCurrentUser = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_URL}/auth/me`, {
+      const res = await fetch(getApiUrl('/auth/me'), {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -56,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (data: LoginInput): Promise<void> => {
     setError(null);
-    const res = await fetch(`${API_URL}/auth/login`, {
+    const res = await fetch(getApiUrl('/auth/login'), {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -79,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (data: RegisterInput): Promise<void> => {
     setError(null);
-    const res = await fetch(`${API_URL}/auth/register`, {
+    const res = await fetch(getApiUrl('/auth/register'), {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -102,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetch(getApiUrl('/auth/logout'), {
         method: 'POST',
         credentials: 'include',
         headers: {

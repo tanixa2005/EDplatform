@@ -12,8 +12,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Normalizes API base URL and endpoint to prevent broken URLs or duplicate slashes.
+ */
+export function getApiUrl(endpoint: string): string {
+  const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${baseUrl}${path}`;
+}
+
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = getApiUrl(endpoint);
   
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
@@ -23,7 +32,7 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
   const response = await fetch(url, {
     ...options,
     headers,
-    credentials: 'include' // Always send cookies for auth
+    credentials: 'include' // Always send cookies for cross-origin auth
   });
 
   const contentType = response.headers.get('content-type');
