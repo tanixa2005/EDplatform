@@ -82,6 +82,7 @@ model Course {
   thumbnailUrl String?
   price        Decimal         @default(0.00) @db.Decimal(10, 2)
   status       CourseStatus    @default(DRAFT)
+  isPublished  Boolean         @default(false)
   level        DifficultyLevel @default(BEGINNER)
 
   instructorId String
@@ -100,6 +101,7 @@ model Course {
 
   @@index([instructorId])
   @@index([status])
+  @@index([isPublished])
   @@index([categoryId])
   @@index([slug])
 }
@@ -127,12 +129,14 @@ model Lesson {
   id            String           @id @default(uuid())
   title         String
   slug          String
+  description   String?          @db.Text
   type          LessonType       @default(VIDEO)
   content       String?          @db.Text
   videoUrl      String?          // Direct URL / CDN URL / Embed
   videoDuration Int?             // Duration in seconds
   sortOrder     Int              @default(0)
   isFreePreview Boolean          @default(false)
+  isPublished   Boolean          @default(true)
 
   moduleId      String
   module        Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -148,6 +152,7 @@ model Lesson {
   @@unique([moduleId, slug])
   @@index([moduleId])
   @@index([sortOrder])
+  @@index([isPublished])
 }
 
 model Resource {
@@ -172,6 +177,7 @@ model Enrollment {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
+  enrolledAt  DateTime  @default(now())
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -182,18 +188,20 @@ model Enrollment {
 }
 
 model LessonProgress {
-  id                  String    @id @default(uuid())
-  userId              String
-  lessonId            String
-  isCompleted         Boolean   @default(false)
-  completedAt         DateTime?
-  lastPositionSeconds Int       @default(0)
+  id                   String    @id @default(uuid())
+  userId               String
+  lessonId             String
+  isCompleted          Boolean   @default(false)
+  completedAt          DateTime?
+  lastPositionSeconds  Int       @default(0)
+  coveragePercentage   Int       @default(0)
+  watchedIntervalsJson Json?
 
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson              Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson               Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@unique([userId, lessonId])
   @@index([userId])

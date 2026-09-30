@@ -59,3 +59,50 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     next(error);
   }
 }
+
+export async function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    let token = req.cookies?.[AUTH_COOKIE_NAME];
+
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.slice(7);
+    }
+
+    if (!token) {
+      return next();
+    }
+
+    let payload;
+    try {
+      payload = verifyToken(token);
+    } catch {
+      return next();
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub }
+    });
+
+    if (!user || !user.isActive) {
+      return next();
+    }
+
+    const safeUser: SafeUser = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    req.user = safeUser;
+    next();
+  } catch {
+    next();
+  }
+}

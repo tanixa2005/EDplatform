@@ -62,13 +62,27 @@ export function Navbar() {
             <Compass className="h-4 w-4" />
             <span>Explore Courses</span>
           </Link>
-          <Link
-            href="/#features"
-            className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <BookOpen className="h-4 w-4" />
-            <span>Platform Features</span>
-          </Link>
+
+          {user && (
+            <Link
+              href="/my-courses"
+              className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>My Courses</span>
+            </Link>
+          )}
+
+          {user && (user.role === 'INSTRUCTOR' || user.role === 'ADMIN') && (
+            <Link
+              href="/instructor/courses"
+              className="flex items-center space-x-1.5 text-primary hover:text-primary/80 transition-colors font-semibold"
+            >
+              <GraduationCap className="h-4 w-4" />
+              <span>Instructor Studio</span>
+            </Link>
+          )}
+
           <Link
             href="/#ai-tutor"
             className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
