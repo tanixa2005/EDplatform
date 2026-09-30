@@ -49,8 +49,12 @@ export function errorHandler(
       ? err.code
       : 'INTERNAL_SERVER_ERROR';
 
-  const message = err.message || 'An unexpected server error occurred';
-  const details = 'details' in err ? err.details : undefined;
+  // In production, never leak internal error messages or database details for unhandled 500 errors
+  const isProductionUnhandled = env.NODE_ENV === 'production' && !isAppError && statusCode >= 500;
+  const message = isProductionUnhandled
+    ? 'An unexpected server error occurred'
+    : (err.message || 'An unexpected server error occurred');
+  const details = isProductionUnhandled ? undefined : ('details' in err ? err.details : undefined);
 
   if (env.NODE_ENV !== 'test' && statusCode >= 500) {
     console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err);
@@ -61,7 +65,7 @@ export function errorHandler(
     error: {
       code: errorCode,
       message,
-      details: details || undefined,
+      ...(details ? { details } : {}),
       ...(env.NODE_ENV === 'development' && { stack: err.stack })
     }
   });

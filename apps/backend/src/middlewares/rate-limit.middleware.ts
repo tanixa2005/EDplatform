@@ -75,3 +75,24 @@ export const aiRateLimiter = createRateLimiter({
   maxRequests: 20,
   message: 'AI Tutor rate limit exceeded (20 requests/minute). Please wait a moment before sending another query.',
 });
+
+// Authentication rate limiter: 15 requests per 15 minutes (brute-force protection)
+export const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 15,
+  message: 'Too many authentication attempts. Please slow down and try again later.',
+});
+
+// Quiz submission rate limiter: 15 requests per minute (anti-spam / integrity protection)
+export const quizSubmitRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 15,
+  message: 'Too many quiz submissions. Please wait a moment before trying again.',
+});
+
+// Dashboard & Analytics rate limiter: 60 requests per minute (DoS protection on aggregations)
+export const dashboardRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 60,
+  message: 'Dashboard analytics rate limit exceeded. Please wait a moment before refreshing.',
+});

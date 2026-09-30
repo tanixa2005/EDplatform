@@ -13,6 +13,7 @@
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace=apps/backend",
     "lint": "eslint ."
   },
   "keywords": [
@@ -29,5 +30,8 @@
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.71.0",
     "eslint": "^9.39.5"
+  },
+  "overrides": {
+    "postcss": "^8.5.28"
   }
 }
