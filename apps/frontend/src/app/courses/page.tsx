@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, BookOpen, BarChart3, Sparkles } from 'lucide-react';
+import { Search, BookOpen, BarChart3, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -61,49 +61,52 @@ export default function CoursesPage() {
   });
 
   const levelBadges: Record<string, { label: string; color: string }> = {
-    BEGINNER: { label: 'Beginner', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
-    INTERMEDIATE: { label: 'Intermediate', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' },
-    ADVANCED: { label: 'Advanced', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' }
+    BEGINNER: { label: 'Beginner', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+    INTERMEDIATE: { label: 'Intermediate', color: 'bg-brand-50 text-brand-700 border-brand-200' },
+    ADVANCED: { label: 'Advanced', color: 'bg-cream text-amber-900 border-amber-300' }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Header */}
-      <section className="relative border-b border-border/40 bg-gradient-to-b from-primary/5 via-background to-background py-14 sm:py-20">
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Editorial Header */}
+      <section className="border-b border-border py-12 sm:py-16">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl space-y-4">
-            <div className="inline-flex items-center space-x-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Explore World-Class AI & Tech Curriculum</span>
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl text-foreground">
-              Master Modern Skills with Interactive Learning
+          <div className="max-w-3xl space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+              Structured Curriculums
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground leading-tight">
+              Explore Our Course Catalog
             </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Explore structured, in-depth courses guided by industry experts and an AI tutor grounded in every lesson.
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-2xl">
+              Master software engineering, databases, and distributed architectures with structured modules, interactive comprehension quizzes, and verified progress tracking.
             </p>
           </div>
 
           {/* Search & Filters */}
-          <div className="mt-8 flex flex-col sm:flex-row gap-4 max-w-2xl">
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 max-w-2xl">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search courses by topic, keyword, or skill..."
+                placeholder="Search courses by title or topic..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-11 bg-background shadow-sm"
+                className="pl-10 h-10 bg-card rounded-md border-border focus:border-primary text-sm"
               />
             </div>
 
-            <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex gap-1.5 overflow-x-auto items-center">
               {['ALL', 'BEGINNER', 'INTERMEDIATE', 'ADVANCED'].map((lvl) => (
                 <Button
                   key={lvl}
                   variant={selectedLevel === lvl ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSelectedLevel(lvl)}
-                  className="capitalize text-xs font-medium"
+                  className={`capitalize text-xs font-semibold rounded-md h-10 px-3 ${
+                    selectedLevel === lvl
+                      ? 'bg-[#111111] text-white hover:bg-[#2A2A2A]'
+                      : 'border-border text-foreground hover:bg-secondary'
+                  }`}
                 >
                   {lvl === 'ALL' ? 'All Levels' : lvl.toLowerCase()}
                 </Button>
@@ -114,33 +117,33 @@ export default function CoursesPage() {
       </section>
 
       {/* Courses Grid */}
-      <section className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+      <section className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-80 rounded-xl border border-border/40 bg-card p-6 animate-pulse space-y-4">
-                <div className="h-36 rounded-lg bg-muted" />
+              <div key={i} className="h-72 rounded-md border border-border bg-card p-5 animate-pulse space-y-4">
+                <div className="h-32 rounded bg-muted" />
                 <div className="h-4 w-3/4 bg-muted rounded" />
                 <div className="h-3 w-1/2 bg-muted rounded" />
               </div>
             ))}
           </div>
         ) : filteredCourses.length === 0 ? (
-          <div className="text-center py-20 border border-dashed rounded-2xl bg-muted/20">
-            <BookOpen className="mx-auto h-12 w-12 text-muted-foreground/60" />
-            <h3 className="mt-4 text-lg font-semibold text-foreground">No courses found</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting your search query or level filter.
+          <div className="text-center py-16 border border-dashed border-border rounded-md bg-card max-w-md mx-auto p-6 space-y-3">
+            <BookOpen className="mx-auto h-10 w-10 text-muted-foreground" />
+            <h3 className="text-base font-bold text-foreground">No matching courses found</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              We couldn&apos;t find any courses matching your filter criteria. Try searching for different topics or clearing filters.
             </p>
             {(searchQuery || selectedLevel !== 'ALL') && (
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-4"
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedLevel('ALL');
                 }}
+                className="mt-2 rounded-md text-xs font-semibold"
               >
                 Clear Filters
               </Button>
@@ -151,64 +154,57 @@ export default function CoursesPage() {
             {filteredCourses.map((course) => {
               const badge = levelBadges[course.level] || levelBadges.BEGINNER;
               return (
-                <Card key={course.id} className="flex flex-col overflow-hidden group hover:border-primary/40 transition-all">
-                  {/* Thumbnail / Header Placeholder */}
-                  <div className="relative aspect-video w-full bg-gradient-to-tr from-primary/15 via-muted to-muted/50 flex items-center justify-center overflow-hidden">
-                    {course.thumbnailUrl ? (
-                      <img
-                        src={course.thumbnailUrl}
-                        alt={course.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-primary/80 space-y-2">
-                        <BookOpen className="h-10 w-10 opacity-70" />
-                        <span className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
-                          Course
-                        </span>
-                      </div>
-                    )}
-                    <span className={`absolute top-3 right-3 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${badge.color} backdrop-blur-md`}>
-                      {badge.label}
-                    </span>
-                  </div>
+                <Card
+                  key={course.id}
+                  className="flex flex-col justify-between overflow-hidden hover:border-primary/50 transition-colors rounded-md border-border bg-card shadow-xs"
+                >
+                  <CardHeader className="space-y-2 pb-2 pt-5 px-5">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                      <span className="font-bold text-foreground text-xs">
+                        {course.price === 0 ? (
+                          <span className="text-emerald-700">Free</span>
+                        ) : (
+                          `$${course.price}`
+                        )}
+                      </span>
+                    </div>
 
-                  <CardHeader className="flex-1 space-y-2 pb-3">
-                    <CardTitle className="line-clamp-2 text-lg font-bold group-hover:text-primary transition-colors">
-                      <Link href={`/courses/${course.slug}`}>
+                    <CardTitle className="line-clamp-2 text-base font-bold text-foreground leading-snug pt-1">
+                      <Link href={`/courses/${course.slug}`} className="hover:text-primary transition-colors">
                         {course.title}
                       </Link>
                     </CardTitle>
-                    <CardDescription className="line-clamp-2 text-sm text-muted-foreground">
+                    <CardDescription className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
                       {course.shortSummary || course.description}
                     </CardDescription>
                   </CardHeader>
 
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
-                        {course.instructor.firstName[0]}
+                  <CardContent className="space-y-3 pt-0 px-5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border pt-3">
+                      <div className="flex items-center space-x-1.5">
+                        <div className="flex h-5 w-5 items-center justify-center rounded bg-foreground text-background font-bold text-[10px]">
+                          {course.instructor.firstName[0]}
+                        </div>
+                        <span className="font-medium text-foreground text-xs truncate max-w-[130px]">
+                          {course.instructor.firstName} {course.instructor.lastName}
+                        </span>
                       </div>
-                      <span className="font-medium text-foreground">
-                        {course.instructor.firstName} {course.instructor.lastName}
-                      </span>
-                    </div>
 
-                    <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-3">
-                      <span className="flex items-center space-x-1">
-                        <BarChart3 className="h-3.5 w-3.5" />
+                      <span className="flex items-center space-x-1 text-xs text-muted-foreground">
+                        <BarChart3 className="h-3 w-3 text-primary" />
                         <span>{course.level.toLowerCase()}</span>
-                      </span>
-                      <span className="font-semibold text-foreground text-sm">
-                        {course.price === 0 ? 'Free' : `$${course.price}`}
                       </span>
                     </div>
                   </CardContent>
 
-                  <CardFooter className="pt-0">
+                  <CardFooter className="pt-0 pb-5 px-5">
                     <Link href={`/courses/${course.slug}`} className="w-full">
-                      <Button className="w-full" variant="outline">
-                        View Course
+                      <Button className="w-full font-semibold text-xs rounded-md border-border hover:bg-secondary" variant="outline">
+                        <span>Explore Syllabus</span>
+                        <ArrowRight className="ml-1.5 h-3.5 w-3.5 text-primary" />
                       </Button>
                     </Link>
                   </CardFooter>

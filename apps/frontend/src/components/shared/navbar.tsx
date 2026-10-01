@@ -2,129 +2,122 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Sparkles, Moon, Sun, BookOpen, Compass, GraduationCap, LogOut, LayoutDashboard } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import {
+  Menu,
+  X,
+  LogOut,
+  LayoutDashboard
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/auth-context';
+import { EdLogo } from '@/components/shared/ed-logo';
+import { ThemeToggle } from '@/components/shared/theme-toggle';
 
 export function Navbar() {
-  const [isDark, setIsDark] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, logout, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
+  // Close mobile menu on route change
   useEffect(() => {
-    // Check initial dark mode from DOM or user preference
-    if (document.documentElement.classList.contains('dark')) {
-      setIsDark(true);
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDark(true);
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const nextDark = !isDark;
-    setIsDark(nextDark);
-    if (nextDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     await logout();
     router.push('/');
   };
 
+  const isActive = (path: string) => {
+    if (path === '/courses') {
+      return pathname.startsWith('/courses') && !pathname.includes('/lessons/');
+    }
+    return pathname === path;
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur-sm transition-colors">
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Brand */}
-        <Link href="/" className="flex items-center space-x-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <GraduationCap className="h-5 w-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-bold tracking-tight text-foreground">
-              ED<span className="text-primary">platform</span>
-            </span>
-          </div>
+        {/* Brand Logo: Original progressive 'E' mark + wordmark */}
+        <Link href="/" className="flex items-center space-x-2 group">
+          <EdLogo size={24} showWordmark={true} />
         </Link>
 
-        {/* Navigation Links */}
-        <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
+        {/* Center Navigation: Explore Courses & AI Tutor */}
+        <nav className="hidden md:flex items-center space-x-7 text-sm font-semibold">
           <Link
             href="/courses"
-            className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            className={`transition-colors py-1 relative ${
+              isActive('/courses')
+                ? 'text-primary font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary'
+                : 'text-foreground/80 hover:text-foreground'
+            }`}
           >
-            <Compass className="h-4 w-4" />
-            <span>Explore Courses</span>
+            Explore Courses
+          </Link>
+
+          <Link
+            href="/#ai-tutor"
+            className="text-foreground/80 hover:text-foreground transition-colors py-1"
+          >
+            AI Tutor
           </Link>
 
           {user && (
             <Link
               href="/my-courses"
-              className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              className={`transition-colors py-1 relative ${
+                isActive('/my-courses')
+                  ? 'text-primary font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary'
+                  : 'text-foreground/80 hover:text-foreground'
+              }`}
             >
-              <BookOpen className="h-4 w-4" />
-              <span>My Courses</span>
+              Learning
             </Link>
           )}
 
           {user && (user.role === 'INSTRUCTOR' || user.role === 'ADMIN') && (
             <Link
               href="/instructor/courses"
-              className="flex items-center space-x-1.5 text-primary hover:text-primary/80 transition-colors font-semibold"
+              className={`transition-colors py-1 relative ${
+                pathname.startsWith('/instructor')
+                  ? 'text-primary font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary'
+                  : 'text-foreground/80 hover:text-foreground'
+              }`}
             >
-              <GraduationCap className="h-4 w-4" />
-              <span>Instructor Studio</span>
+              Instructor Studio
             </Link>
           )}
-
-          <Link
-            href="/#ai-tutor"
-            className="flex items-center space-x-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span>AI Tutor</span>
-          </Link>
         </nav>
 
-        {/* Action Controls */}
+        {/* Right Action Controls: Theme Toggle, Sign In & [Get Started] */}
         <div className="flex items-center space-x-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="h-9 w-9 text-muted-foreground hover:text-foreground"
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
+          <ThemeToggle />
 
           {isLoading ? (
-            <div className="h-8 w-20 rounded-md bg-muted animate-pulse" />
+            <div className="h-9 w-20 rounded-md bg-muted animate-pulse" />
           ) : user ? (
-            <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="flex items-center space-x-3">
               <Link href="/dashboard">
-                <Button variant="outline" size="sm" className="hidden sm:inline-flex items-center space-x-1.5">
-                  <LayoutDashboard className="h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" className="hidden sm:inline-flex items-center space-x-1.5 font-semibold">
+                  <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
                   <span>Dashboard</span>
                 </Button>
               </Link>
 
-              <div className="flex items-center space-x-2 pl-1 border-l border-border/60">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <div className="flex items-center space-x-2 pl-2 border-l border-border">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background text-xs font-bold">
                   {user.firstName[0]?.toUpperCase()}
                   {user.lastName[0]?.toUpperCase()}
                 </div>
                 <div className="hidden lg:flex flex-col text-left">
-                  <span className="text-xs font-medium text-foreground leading-none">
-                    {user.firstName} {user.lastName}
+                  <span className="text-xs font-bold text-foreground leading-tight">
+                    {user.firstName}
                   </span>
-                  <Badge variant="outline" className="mt-1 text-[10px] px-1 py-0 h-4 w-fit">
+                  <Badge variant="brand" className="text-[9px] px-1 py-0 h-3 w-fit rounded-xs">
                     {user.role}
                   </Badge>
                 </div>
@@ -136,26 +129,101 @@ export function Navbar() {
                 onClick={handleLogout}
                 title="Sign out"
                 aria-label="Sign out"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                className="h-8 w-8 text-muted-foreground hover:text-primary rounded-md"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
           ) : (
-            <>
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
-                  Sign In
-                </Button>
+            <div className="flex items-center space-x-3">
+              <Link
+                href="/login"
+                className="text-sm font-semibold text-foreground hover:text-primary transition-colors px-2 py-1"
+              >
+                Sign In
               </Link>
 
               <Link href="/register">
-                <Button size="sm">Get Started</Button>
+                <Button size="sm" className="font-semibold bg-primary text-white hover:bg-brand-600 rounded-md px-4 shadow-xs">
+                  Get Started
+                </Button>
               </Link>
-            </>
+            </div>
           )}
+
+          {/* Mobile Menu Trigger */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden h-9 w-9 text-foreground"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
         </div>
       </div>
+
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-border bg-background px-4 py-4 space-y-3">
+          <Link
+            href="/courses"
+            className="block px-3 py-2 rounded-md text-sm font-semibold text-foreground hover:bg-muted"
+          >
+            Explore Courses
+          </Link>
+
+          <Link
+            href="/#ai-tutor"
+            className="block px-3 py-2 rounded-md text-sm font-semibold text-foreground hover:bg-muted"
+          >
+            AI Tutor
+          </Link>
+
+          {user && (
+            <Link
+              href="/my-courses"
+              className="block px-3 py-2 rounded-md text-sm font-semibold text-foreground hover:bg-muted"
+            >
+              Learning
+            </Link>
+          )}
+
+          {user && (user.role === 'INSTRUCTOR' || user.role === 'ADMIN') && (
+            <Link
+              href="/instructor/courses"
+              className="block px-3 py-2 rounded-md text-sm font-semibold text-primary bg-accent"
+            >
+              Instructor Studio
+            </Link>
+          )}
+
+          {user && (
+            <Link
+              href="/dashboard"
+              className="block px-3 py-2 rounded-md text-sm font-semibold text-foreground hover:bg-muted"
+            >
+              My Dashboard
+            </Link>
+          )}
+
+          {!user && (
+            <div className="pt-3 border-t border-border flex flex-col gap-2">
+              <Link href="/login" className="w-full">
+                <Button variant="outline" className="w-full justify-center">
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/register" className="w-full">
+                <Button className="w-full justify-center bg-primary text-white hover:bg-brand-600">
+                  Get Started
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }

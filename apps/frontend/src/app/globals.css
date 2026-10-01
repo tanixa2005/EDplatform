@@ -4,65 +4,72 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    /* 70% Warm Ivory / Off-White */
+    --background: 43 60% 99%; /* #FFFDF8 */
+    /* 20% Near-Black Ink */
+    --foreground: 0 0% 7%; /* #111111 */
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 0 0% 7%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    /* 10% Confident Deep Red Accent */
+    --primary: 1 77% 55%; /* #E53935 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    /* Soft Warm / Cream Secondary */
+    --secondary: 43 30% 95%; /* #F7F4EB */
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 43 25% 94%;
+    --muted-foreground: 0 0% 40%; /* #666666 */
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    /* Soft Blush / Supporting Red */
+    --accent: 3 85% 95%; /* #FDE8E7 */
+    --accent-foreground: 0 74% 42%; /* #B91C1C */
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    /* Crisp thin borders */
+    --border: 40 18% 88%; /* #E7E3D8 */
+    --input: 40 18% 88%;
+    --ring: 1 77% 55%;
 
+    /* Reduced corner radius: crisp, lightly rounded rectangular (8px) */
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 8%;
+    --foreground: 43 40% 98%;
 
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 11%;
+    --card-foreground: 43 40% 98%;
 
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 43 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 1 77% 58%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 43 40% 98%;
 
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 217 33% 18%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 1 50% 18%;
+    --accent-foreground: 1 77% 75%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 1 77% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 224 76% 48%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 1 77% 58%;
   }
 }
 
@@ -73,5 +80,56 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+@layer utilities {
+  /* Subtle educational highlighter */
+  .highlight-red {
+    position: relative;
+    display: inline-block;
+  }
+  .highlight-red::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    bottom: 2px;
+    height: 30%;
+    background-color: rgba(229, 57, 53, 0.16);
+    border-radius: 2px;
+    z-index: -1;
+  }
+
+  .highlight-cream {
+    position: relative;
+    display: inline-block;
+  }
+  .highlight-cream::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    bottom: 2px;
+    height: 38%;
+    background-color: rgba(255, 243, 205, 0.85);
+    border-radius: 2px;
+    z-index: -1;
+  }
+
+  /* Educational crisp card */
+  .study-card {
+    @apply bg-card border border-border transition-all duration-150;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .study-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    border-color: rgba(229, 57, 53, 0.35);
+  }
+
+  /* Sharp geometric badge */
+  .tag-pill {
+    @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded border;
   }
 }

@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Menu,
   X,
-  BookOpen,
   ArrowLeft,
   ArrowRight,
   Award,
@@ -263,7 +262,7 @@ export default function LessonClassroomPage({
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-3">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Loading classroom environment...</p>
+          <p className="text-sm text-muted-foreground font-medium">Entering focused classroom...</p>
         </div>
       </div>
     );
@@ -271,14 +270,16 @@ export default function LessonClassroomPage({
 
   if (error || !lesson) {
     return (
-      <div className="container mx-auto max-w-2xl px-4 py-20 text-center">
-        <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
-        <h2 className="mt-4 text-2xl font-bold text-foreground">Access Restricted</h2>
-        <p className="mt-2 text-muted-foreground">
-          {error || 'You must enroll in this course to view this lesson.'}
+      <div className="container mx-auto max-w-xl px-4 py-20 text-center space-y-4">
+        <div className="p-4 rounded-lg bg-destructive/10 text-destructive w-fit mx-auto">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h2 className="text-2xl font-bold text-foreground">Access Restricted</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {error || 'You must enroll in this course to access this lesson.'}
         </p>
-        <Link href={`/courses/${slug}`} className="mt-6 inline-block">
-          <Button>Return to Course Details</Button>
+        <Link href={`/courses/${slug}`} className="inline-block pt-2">
+          <Button className="rounded-md">Return to Course Overview</Button>
         </Link>
       </div>
     );
@@ -292,40 +293,40 @@ export default function LessonClassroomPage({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Top Control Bar */}
-        <div className="border-b border-border/40 bg-card px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+        <div className="border-b border-border bg-[#FFFDF8] px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+          <div className="flex items-center space-x-3 min-w-0">
             <Link
               href={`/courses/${lesson.courseSlug}`}
-              className="inline-flex items-center text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex items-center text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
-              <span>Back to Course</span>
+              <span className="hidden sm:inline">Back to Course</span>
             </Link>
-            <span className="text-muted-foreground/40">|</span>
-            <span className="text-xs font-semibold text-foreground truncate max-w-[200px] sm:max-w-md">
+            <span className="text-muted-foreground/30 hidden sm:inline">&bull;</span>
+            <span className="text-xs font-bold text-foreground truncate max-w-[200px] sm:max-w-md">
               {lesson.courseTitle}
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 shrink-0">
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
               onClick={() => setAiTutorOpen(true)}
-              className="text-xs flex items-center space-x-1.5 shadow-sm"
+              className="text-xs flex items-center space-x-1.5 rounded-md border-[#E53935]/30 bg-[#FDE8E7] text-[#B91C1C] hover:bg-[#FDE8E7]/80 font-medium"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>AI Tutor</span>
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span>Ask AI Tutor</span>
             </Button>
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden text-xs flex items-center space-x-1"
+              className="lg:hidden text-xs flex items-center space-x-1 rounded-md border-border"
             >
               <Menu className="h-4 w-4" />
-              <span>Curriculum</span>
+              <span>Syllabus</span>
             </Button>
           </div>
         </div>
@@ -333,7 +334,7 @@ export default function LessonClassroomPage({
         {/* Video Player or Text Lesson Content */}
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-6">
           {lesson.type === 'VIDEO' ? (
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-2xl border border-border/40">
+            <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black shadow-sm border border-border">
               {lesson.playback?.url ? (
                 <video
                   ref={videoRef}
@@ -347,25 +348,25 @@ export default function LessonClassroomPage({
                 />
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-white">
-                  <Play className="h-16 w-16 opacity-30 mb-4" />
-                  <p className="text-lg font-semibold">Video Stream Not Available</p>
+                  <Play className="h-14 w-14 opacity-40 mb-3" />
+                  <p className="text-base font-semibold">Video Stream Not Available</p>
                   <p className="text-xs text-white/60 mt-1 max-w-md">
-                    This lesson requires enrollment or an active video source.
+                    This lesson requires enrollment or an active video source reference.
                   </p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-border/60 bg-card p-6 sm:p-10 shadow-sm space-y-4">
-              <Badge variant="outline" className="text-xs">
+            <div className="rounded-lg border border-border bg-card p-6 sm:p-10 shadow-xs space-y-4">
+              <Badge variant="outline" className="text-xs rounded-md border-border bg-muted/40">
                 Text Lesson
               </Badge>
-              <div className="prose dark:prose-invert max-w-none text-foreground leading-relaxed">
+              <div className="prose dark:prose-invert max-w-none text-foreground leading-relaxed text-sm sm:text-base">
                 {lesson.content || 'No text content available for this lesson.'}
               </div>
               {!isCompleted && user && (
-                <div className="pt-4 border-t border-border/40">
-                  <Button onClick={() => syncProgress(true)} size="sm">
+                <div className="pt-4 border-t border-border">
+                  <Button onClick={() => syncProgress(true)} size="sm" className="rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
                     Mark as Completed
                   </Button>
                 </div>
@@ -375,30 +376,30 @@ export default function LessonClassroomPage({
 
           {/* Meaningful Progress Bar & Milestone Status */}
           {user && (
-            <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-2">
+            <div className="rounded-lg border border-border bg-card p-5 space-y-2.5 shadow-xs">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className="flex items-center space-x-1.5 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
+                  <Clock className="h-3.5 w-3.5 text-primary" />
                   <span>Playback Watch Coverage</span>
                 </span>
-                <span className={isCompleted ? 'text-emerald-500 font-bold' : 'text-primary'}>
-                  {coverage}% {isCompleted ? '(Completed)' : '(Need 90% to complete)'}
+                <span className={isCompleted ? 'text-emerald-700 font-bold' : 'text-primary font-bold'}>
+                  {coverage}% {isCompleted ? '(Lesson Verified)' : '(90% required for credit)'}
                 </span>
               </div>
 
               <Progress
                 value={coverage}
-                indicatorClassName={isCompleted ? 'bg-emerald-500' : 'bg-primary'}
+                indicatorClassName={isCompleted ? 'bg-emerald-600' : 'bg-primary'}
               />
 
               {isCompleted ? (
-                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 pt-1">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 pt-1">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>Lesson requirement completed! Meaningful watch threshold met.</span>
+                  <span>Lesson requirement completed! Verified watch threshold met.</span>
                 </div>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  Watch at least 90% of this lesson to automatically achieve completion credit. Seeking directly to the end will not bypass verification.
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Watch at least 90% of this lesson to automatically achieve completion credit. Skipping ahead to the end without watching will not satisfy the threshold.
                 </p>
               )}
             </div>
@@ -406,15 +407,15 @@ export default function LessonClassroomPage({
 
           {/* Lesson Quiz Banner */}
           {lessonQuiz && user && (
-            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+            <div className="rounded-lg border border-border bg-[#FFFDF8] p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
               <div className="flex items-center space-x-3.5">
-                <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                <div className="p-3 rounded-md bg-[#FDE8E7] text-primary border border-primary/20">
                   <Award className="h-6 w-6" />
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
                     <h3 className="text-sm font-bold text-foreground">{lessonQuiz.title}</h3>
-                    <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                    <Badge variant="outline" className="text-[10px] text-primary border-primary/30 rounded-md bg-card">
                       {lessonQuiz.questionsCount} Questions
                     </Badge>
                   </div>
@@ -428,7 +429,7 @@ export default function LessonClassroomPage({
               </div>
 
               <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.id}/quiz`}>
-                <Button size="sm" className="space-x-1.5 w-full sm:w-auto">
+                <Button size="sm" className="space-x-1.5 w-full sm:w-auto rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
                   <span>Take Lesson Quiz</span>
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -437,20 +438,20 @@ export default function LessonClassroomPage({
           )}
 
           {/* Lesson Header & Details */}
-          <div className="space-y-3">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <div className="space-y-3 pt-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground font-display">
               {lesson.title}
             </h1>
             {lesson.description && (
-              <p className="text-muted-foreground text-sm leading-relaxed">{lesson.description}</p>
+              <p className="text-muted-foreground text-sm leading-relaxed max-w-3xl">{lesson.description}</p>
             )}
           </div>
 
           {/* Next / Previous Lesson Controls */}
-          <div className="flex items-center justify-between border-t border-border/40 pt-6">
+          <div className="flex items-center justify-between border-t border-border pt-6">
             {lesson.prevLesson ? (
               <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.prevLesson.id}`}>
-                <Button variant="outline" size="sm" className="space-x-1.5">
+                <Button variant="outline" size="sm" className="space-x-1.5 rounded-md border-border font-medium">
                   <ChevronLeft className="h-4 w-4" />
                   <span className="hidden sm:inline">Previous:</span>
                   <span className="truncate max-w-[120px]">{lesson.prevLesson.title}</span>
@@ -462,7 +463,7 @@ export default function LessonClassroomPage({
 
             {lesson.nextLesson ? (
               <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.nextLesson.id}`}>
-                <Button size="sm" className="space-x-1.5">
+                <Button size="sm" className="space-x-1.5 rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
                   <span className="hidden sm:inline">Next:</span>
                   <span className="truncate max-w-[120px]">{lesson.nextLesson.title}</span>
                   <ChevronRight className="h-4 w-4" />
@@ -470,9 +471,9 @@ export default function LessonClassroomPage({
               </Link>
             ) : (
               <Link href={`/courses/${lesson.courseSlug}`}>
-                <Button variant="outline" size="sm" className="space-x-1.5">
+                <Button variant="outline" size="sm" className="space-x-1.5 rounded-md border-border font-medium">
                   <span>Finish Course</span>
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
                 </Button>
               </Link>
             )}
@@ -482,29 +483,29 @@ export default function LessonClassroomPage({
 
       {/* Right Curriculum Navigation Sidebar (Desktop + Mobile Drawer) */}
       <aside
-        className={`fixed inset-y-0 right-0 z-50 w-80 bg-card border-l border-border/40 flex flex-col transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 right-0 z-50 w-80 bg-[#FFFDF8] border-l border-border flex flex-col transition-transform duration-300 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="p-4 border-b border-border/40 flex items-center justify-between">
+        <div className="p-4 border-b border-border flex items-center justify-between bg-card">
           <div className="flex items-center space-x-2">
-            <BookOpen className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Course Content</h3>
+            <div className="h-2 w-2 rounded-full bg-primary" />
+            <h3 className="text-sm font-bold text-foreground">Course Content</h3>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-8 w-8"
+            className="lg:hidden h-8 w-8 rounded-md"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-border/30 p-2 space-y-4">
+        <div className="flex-1 overflow-y-auto divide-y divide-border p-3 space-y-4">
           {lesson.courseNavigation.map((mod, modIdx) => (
             <div key={mod.id} className="pt-2">
-              <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="px-3 py-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wider font-mono">
                 Module {modIdx + 1}: {mod.title}
               </div>
 
@@ -516,25 +517,25 @@ export default function LessonClassroomPage({
                       key={navLesson.id}
                       href={`/courses/${lesson.courseSlug}/lessons/${navLesson.id}`}
                       onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-md text-xs transition-colors ${
                         isActive
-                          ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
-                          : 'hover:bg-muted/60 text-foreground'
+                          ? 'bg-[#111111] text-white font-semibold'
+                          : 'hover:bg-muted/50 text-foreground'
                       }`}
                     >
                       <div className="flex items-center space-x-2 truncate">
                         {isActive ? (
-                          <Play className="h-3.5 w-3.5 flex-shrink-0" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-[#E53935] shrink-0" />
                         ) : (
-                          <div className="h-2 w-2 rounded-full bg-muted-foreground/50 flex-shrink-0" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
                         )}
                         <span className="truncate">{navLesson.title}</span>
                       </div>
 
                       {navLesson.videoDuration ? (
                         <span
-                          className={`text-[10px] ml-2 ${
-                            isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                          className={`text-[10px] ml-2 font-mono ${
+                            isActive ? 'text-white/70' : 'text-muted-foreground'
                           }`}
                         >
                           {Math.round(navLesson.videoDuration / 60)}m
@@ -559,3 +560,4 @@ export default function LessonClassroomPage({
     </div>
   );
 }
+

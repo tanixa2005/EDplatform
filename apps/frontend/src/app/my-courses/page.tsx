@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BookOpen, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -55,26 +56,26 @@ export default function MyCoursesPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-background py-12">
+      <div className="min-h-screen bg-background py-10 sm:py-14">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
           {/* Header */}
-          <div className="border-b border-border/40 pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="border-b border-border pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="inline-flex items-center space-x-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary mb-2">
+              <div className="inline-flex items-center space-x-2 rounded-md border border-[#E53935]/20 bg-[#FDE8E7] px-3.5 py-1 text-xs font-semibold text-[#B91C1C] mb-2.5">
                 <BookOpen className="h-3.5 w-3.5" />
-                <span>Student Learning Center</span>
+                <span>Active Learning Journey</span>
               </div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+              <h1 className="text-3xl font-extrabold tracking-tight text-foreground font-display">
                 My Enrolled Courses
               </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Pick up right where you left off and monitor your progress across your learning paths.
+              <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+                Resume lessons, review completed modules, and keep moving toward your verified certificate of completion.
               </p>
             </div>
 
             <Link href="/courses">
-              <Button variant="outline" size="sm" className="space-x-1.5">
-                <span>Browse More Courses</span>
+              <Button variant="outline" size="sm" className="space-x-1.5 rounded-md h-10 border-border font-medium">
+                <span>Explore Catalog</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -84,22 +85,28 @@ export default function MyCoursesPage() {
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-72 rounded-xl border border-border/40 bg-card p-6 animate-pulse space-y-4">
-                  <div className="h-32 rounded-lg bg-muted" />
+                <div key={i} className="h-76 rounded-lg border border-border bg-card p-6 animate-pulse space-y-4">
+                  <div className="h-36 rounded-md bg-muted" />
                   <div className="h-4 w-2/3 bg-muted rounded" />
                   <div className="h-3 w-1/3 bg-muted rounded" />
+                  <div className="h-9 w-full bg-muted rounded-md mt-4" />
                 </div>
               ))}
             </div>
           ) : enrollments.length === 0 ? (
-            <div className="text-center py-20 border border-dashed rounded-2xl bg-muted/20 max-w-2xl mx-auto">
-              <BookOpen className="mx-auto h-12 w-12 text-muted-foreground/60" />
-              <h3 className="mt-4 text-lg font-semibold text-foreground">No enrolled courses yet</h3>
-              <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
-                Explore our catalog to find hands-on, high-impact courses powered by our AI tutor.
+            <div className="text-center py-20 border border-dashed border-border rounded-lg bg-card/40 max-w-xl mx-auto p-8 space-y-4">
+              <div className="p-4 rounded-md bg-[#FDE8E7] text-primary w-fit mx-auto border border-primary/20">
+                <BookOpen className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground">No enrolled courses yet</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                Discover courses taught by real-world practitioners with grounded AI tutoring and verifiable completion records.
               </p>
-              <Link href="/courses" className="mt-6 inline-block">
-                <Button>Explore Courses</Button>
+              <Link href="/courses" className="inline-block pt-2">
+                <Button className="rounded-md bg-[#111111] text-white hover:bg-black font-semibold shadow-xs">
+                  <span>Browse Course Catalog</span>
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
               </Link>
             </div>
           ) : (
@@ -109,9 +116,9 @@ export default function MyCoursesPage() {
                 const isCompleted = item.progressPercentage >= 100 || !!item.completedAt;
 
                 return (
-                  <Card key={item.id} className="flex flex-col overflow-hidden hover:border-primary/40 transition-all">
+                  <Card key={item.id} className="flex flex-col overflow-hidden hover:border-foreground/30 transition-all duration-200 rounded-lg border-border hover:shadow-sm bg-card">
                     {/* Thumbnail */}
-                    <div className="relative aspect-video w-full bg-gradient-to-tr from-primary/15 via-muted to-muted/50 flex items-center justify-center overflow-hidden">
+                    <div className="relative aspect-video w-full bg-muted flex items-center justify-center overflow-hidden border-b border-border">
                       {course.thumbnailUrl ? (
                         <img
                           src={course.thumbnailUrl}
@@ -119,22 +126,31 @@ export default function MyCoursesPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <BookOpen className="h-10 w-10 text-primary/70" />
+                        <div className="p-3.5 rounded-md bg-card border border-border text-primary">
+                          <BookOpen className="h-7 w-7" />
+                        </div>
                       )}
 
-                      {isCompleted && (
-                        <div className="absolute top-3 right-3 flex items-center space-x-1 rounded-full bg-emerald-500/90 text-white px-2.5 py-0.5 text-xs font-semibold shadow-md">
+                      {isCompleted ? (
+                        <div className="absolute top-3 right-3 flex items-center space-x-1 rounded-md bg-emerald-700 text-white px-2.5 py-0.5 text-xs font-semibold shadow-xs">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           <span>Completed</span>
+                        </div>
+                      ) : (
+                        <div className="absolute top-3 right-3">
+                          <Badge variant="outline" className="bg-card text-[11px] font-semibold text-primary border-border font-mono rounded-md">
+                            {item.progressPercentage}%
+                          </Badge>
                         </div>
                       )}
                     </div>
 
-                    <CardHeader className="space-y-1.5 flex-1">
-                      <div className="text-xs text-muted-foreground">
-                        Instructor: {course.instructor.firstName} {course.instructor.lastName}
+                    <CardHeader className="space-y-1.5 flex-1 pt-5 pb-3">
+                      <div className="text-xs text-muted-foreground flex items-center space-x-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        <span>Instructor: {course.instructor.firstName} {course.instructor.lastName}</span>
                       </div>
-                      <CardTitle className="line-clamp-2 text-base font-bold">
+                      <CardTitle className="line-clamp-2 text-base font-bold leading-snug">
                         <Link href={`/courses/${course.slug}`} className="hover:text-primary transition-colors">
                           {course.title}
                         </Link>
@@ -144,22 +160,22 @@ export default function MyCoursesPage() {
                     <CardContent className="space-y-3 pt-0">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs font-semibold">
-                          <span className="text-muted-foreground">Course Progress</span>
-                          <span className={isCompleted ? 'text-emerald-500' : 'text-primary'}>
+                          <span className="text-muted-foreground">Course Completion</span>
+                          <span className={`font-mono ${isCompleted ? 'text-emerald-700' : 'text-primary'}`}>
                             {item.progressPercentage}%
                           </span>
                         </div>
                         <Progress
                           value={item.progressPercentage}
-                          indicatorClassName={isCompleted ? 'bg-emerald-500' : 'bg-primary'}
+                          indicatorClassName={isCompleted ? 'bg-emerald-600' : 'bg-primary'}
                         />
                       </div>
                     </CardContent>
 
-                    <CardFooter className="pt-0 border-t border-border/40 pt-4">
+                    <CardFooter className="pb-5 border-t border-border pt-4">
                       <Link href={`/courses/${course.slug}`} className="w-full">
-                        <Button className="w-full" variant={isCompleted ? 'outline' : 'default'}>
-                          <span>{isCompleted ? 'Review Course' : 'Continue Learning'}</span>
+                        <Button className="w-full rounded-md font-semibold" variant={isCompleted ? 'outline' : 'default'}>
+                          <span>{isCompleted ? 'Review Syllabus' : 'Continue Learning'}</span>
                           <ArrowRight className="h-4 w-4 ml-1.5" />
                         </Button>
                       </Link>
@@ -174,3 +190,4 @@ export default function MyCoursesPage() {
     </ProtectedRoute>
   );
 }
+

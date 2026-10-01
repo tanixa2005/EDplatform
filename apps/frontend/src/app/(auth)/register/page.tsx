@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { GraduationCap, ArrowRight, Loader2, AlertCircle, BookOpen, Layers } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle, BookOpen, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { useAuth } from '@/context/auth-context';
@@ -52,54 +52,56 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-lg shadow-xl border-border/80">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <GraduationCap className="h-6 w-6" />
+      <Card className="w-full max-w-lg shadow-xs border-border rounded-lg bg-card">
+        <CardHeader className="space-y-1.5 text-center pt-8 pb-4">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white font-black text-sm mb-2 shadow-xs">
+            ED
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Create your account</CardTitle>
-          <CardDescription>Join EDplatform to start learning or teaching today</CardDescription>
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Create Your Account</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Join EDplatform to study structured curriculums and verify your mastery
+          </CardDescription>
         </CardHeader>
 
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-2">
             {errorMessage && (
-              <div className="flex items-start space-x-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+              <div className="flex items-start space-x-2 rounded-md border border-brand-200 bg-brand-50 p-3 text-xs text-brand-700">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
+                <span className="font-medium leading-relaxed">{errorMessage}</span>
               </div>
             )}
 
             {/* Role Selector */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-foreground">
-                I want to join as a:
+              <label className="block text-xs font-bold text-foreground">
+                I want to join as:
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setRole('STUDENT')}
-                  className={`flex items-center justify-center space-x-2 rounded-lg border p-3 text-xs font-semibold transition ${
+                  className={`flex items-center justify-center space-x-2 rounded-md border p-3 text-xs font-bold transition-all ${
                     role === 'STUDENT'
-                      ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                      : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
+                      ? 'border-primary bg-brand-50 text-foreground ring-1 ring-primary/40 shadow-xs'
+                      : 'border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
                   }`}
                 >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Student</span>
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  <span>Student Learner</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setRole('INSTRUCTOR')}
-                  className={`flex items-center justify-center space-x-2 rounded-lg border p-3 text-xs font-semibold transition ${
+                  className={`flex items-center justify-center space-x-2 rounded-md border p-3 text-xs font-bold transition-all ${
                     role === 'INSTRUCTOR'
-                      ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                      : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
+                      ? 'border-primary bg-brand-50 text-foreground ring-1 ring-primary/40 shadow-xs'
+                      : 'border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
                   }`}
                 >
-                  <Layers className="h-4 w-4" />
-                  <span>Instructor</span>
+                  <Layers className="h-4 w-4 text-primary" />
+                  <span>Course Instructor</span>
                 </button>
               </div>
             </div>
@@ -107,41 +109,41 @@ export default function RegisterPage() {
             {/* First & Last Name */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label htmlFor="firstName" className="block text-xs font-semibold text-foreground">
+                <label htmlFor="firstName" className="block text-xs font-bold text-foreground">
                   First Name
                 </label>
                 <input
                   id="firstName"
                   type="text"
                   required
-                  placeholder="Jane"
+                  placeholder="Rahul"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="lastName" className="block text-xs font-semibold text-foreground">
+                <label htmlFor="lastName" className="block text-xs font-bold text-foreground">
                   Last Name
                 </label>
                 <input
                   id="lastName"
                   type="text"
                   required
-                  placeholder="Doe"
+                  placeholder="Sharma"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition"
                 />
               </div>
             </div>
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label htmlFor="email" className="block text-xs font-semibold text-foreground">
+              <label htmlFor="email" className="block text-xs font-bold text-foreground">
                 Email Address
               </label>
               <input
@@ -149,17 +151,17 @@ export default function RegisterPage() {
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="name@example.com"
+                placeholder="rahul@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isSubmitting}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition"
               />
             </div>
 
             {/* Password */}
             <div className="space-y-1.5">
-              <label htmlFor="password" className="block text-xs font-semibold text-foreground">
+              <label htmlFor="password" className="block text-xs font-bold text-foreground">
                 Password
               </label>
               <input
@@ -167,36 +169,40 @@ export default function RegisterPage() {
                 type="password"
                 required
                 autoComplete="new-password"
-                placeholder="At least 8 chars with number & uppercase"
+                placeholder="At least 8 chars with uppercase & number"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isSubmitting}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Must contain at least 8 characters, including an uppercase letter, lowercase letter, and number.
+              <p className="text-[11px] text-muted-foreground pt-0.5">
+                Must contain at least 8 characters, with an uppercase letter, lowercase letter, and number.
               </p>
             </div>
           </CardContent>
 
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" disabled={isSubmitting} className="w-full">
+          <CardFooter className="flex flex-col space-y-4 pt-2 pb-8">
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-md py-2.5 font-bold bg-[#111111] text-white hover:bg-[#2A2A2A] shadow-xs"
+            >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span>Creating account...</span>
+                  <span>Creating your account...</span>
                 </>
               ) : (
                 <>
                   <span>Create Account</span>
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="ml-2 h-4 w-4 text-primary" />
                 </>
               )}
             </Button>
 
             <div className="text-center text-xs text-muted-foreground">
               Already have an account?{' '}
-              <Link href="/login" className="font-semibold text-primary hover:underline">
+              <Link href="/login" className="font-bold text-primary hover:underline">
                 Sign in instead
               </Link>
             </div>

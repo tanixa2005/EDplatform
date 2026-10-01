@@ -39,8 +39,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-16 text-center">
-        <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 shadow-sm">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-4">
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-8 shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-destructive/10 text-destructive mb-4">
             <ShieldAlert className="h-6 w-6" />
           </div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Access Restricted</h2>

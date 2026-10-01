@@ -249,8 +249,8 @@ export default function InstructorQuizEditorPage({
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-16 animate-pulse space-y-6">
-        <div className="h-8 w-1/3 bg-muted rounded" />
-        <div className="h-64 bg-muted rounded-xl" />
+        <div className="h-8 w-1/3 bg-muted rounded-md" />
+        <div className="h-64 bg-muted/60 rounded-lg" />
       </div>
     );
   }
@@ -260,26 +260,26 @@ export default function InstructorQuizEditorPage({
       <div className="min-h-screen bg-background py-10">
         <div className="container mx-auto max-w-4xl px-4 sm:px-6 space-y-8">
           {/* Top Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-5 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-5 gap-4">
             <div>
-              <div className="inline-flex items-center space-x-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary mb-1">
+              <div className="inline-flex items-center space-x-2 rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary mb-2">
                 <Award className="h-3.5 w-3.5" />
                 <span>Instructor Quiz Studio</span>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="font-display text-2xl sm:text-3xl font-black tracking-tight text-foreground">
                 {quiz ? quiz.title : 'Create Lesson Quiz'}
               </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Configure evaluation criteria, passing thresholds, and question options.
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-lg leading-relaxed">
+                Configure evaluation criteria, passing thresholds, time limits, and question options.
               </p>
             </div>
 
             {quiz && (
               <Button
-                variant={quiz.isPublished ? 'secondary' : 'default'}
+                variant={quiz.isPublished ? 'outline' : 'default'}
                 size="sm"
                 onClick={handleTogglePublish}
-                className="space-x-1.5 text-xs"
+                className="space-x-1.5 text-xs rounded-md font-semibold"
               >
                 {quiz.isPublished ? (
                   <>
@@ -297,53 +297,56 @@ export default function InstructorQuizEditorPage({
           </div>
 
           {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
+            <div className="rounded-md bg-destructive/10 p-4 text-xs text-destructive font-medium border border-destructive/20">
               {error}
             </div>
           )}
 
           {/* Section 1: Quiz Settings Form */}
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="py-4 px-6 border-b border-border/40">
-              <CardTitle className="text-base font-semibold">Quiz Parameters & Scoring</CardTitle>
+          <Card className="rounded-lg border border-border shadow-xs bg-card overflow-hidden">
+            <CardHeader className="py-3.5 px-6 border-b border-border bg-muted/30">
+              <CardTitle className="font-display text-sm font-bold text-foreground uppercase tracking-wider">Quiz Parameters & Scoring</CardTitle>
             </CardHeader>
 
             <CardContent className="p-6">
               <form onSubmit={handleCreateOrUpdateSettings} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Quiz Title</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground">Quiz Title</label>
                   <Input
                     placeholder="e.g. Lesson 1 Comprehension Check"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
+                    className="rounded-md"
                     required
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Description (Optional)</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground">Description (Optional)</label>
                   <Textarea
                     placeholder="Brief instructions or overview for students..."
                     rows={2}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    className="rounded-md"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">Passing Score (%)</label>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground">Passing Score (%)</label>
                     <Input
                       type="number"
                       min="0"
                       max="100"
                       value={passingScore}
                       onChange={(e) => setPassingScore(parseInt(e.target.value) || 0)}
+                      className="rounded-md"
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground">
                       Time Limit (Minutes, leave blank for unlimited)
                     </label>
                     <Input
@@ -354,12 +357,13 @@ export default function InstructorQuizEditorPage({
                       onChange={(e) =>
                         setTimeLimitMinutes(e.target.value ? parseInt(e.target.value) : '')
                       }
+                      className="rounded-md"
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" size="sm" disabled={isSavingSettings} className="space-x-1.5">
+                <div className="flex justify-end pt-3 border-t border-border">
+                  <Button type="submit" size="sm" disabled={isSavingSettings} className="space-x-1.5 rounded-md font-semibold px-4">
                     <Save className="h-3.5 w-3.5" />
                     <span>{isSavingSettings ? 'Saving...' : quiz ? 'Update Settings' : 'Create Quiz'}</span>
                   </Button>
@@ -370,12 +374,12 @@ export default function InstructorQuizEditorPage({
 
           {/* Section 2: Questions Management */}
           {quiz && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-foreground">Questions ({quiz.questions?.length || 0})</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Total Possible Points: {quiz.totalPoints}
+                  <h2 className="font-display text-lg font-bold text-foreground">Questions ({quiz.questions?.length || 0})</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Total Possible Points: <span className="font-bold text-foreground">{quiz.totalPoints}</span>
                   </p>
                 </div>
 
@@ -383,7 +387,7 @@ export default function InstructorQuizEditorPage({
                   <Button
                     size="sm"
                     onClick={() => setShowAddQuestion(true)}
-                    className="space-x-1 text-xs"
+                    className="space-x-1.5 text-xs rounded-md font-semibold px-4"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>Add Question</span>
@@ -393,29 +397,30 @@ export default function InstructorQuizEditorPage({
 
               {/* Add Question Card */}
               {showAddQuestion && (
-                <Card className="border-primary/40 shadow-md bg-muted/10">
-                  <CardHeader className="py-4 px-6 border-b border-border/40">
-                    <CardTitle className="text-base font-semibold">New Question</CardTitle>
+                <Card className="rounded-lg border border-primary/30 shadow-xs bg-card overflow-hidden">
+                  <CardHeader className="py-3.5 px-6 border-b border-border bg-muted/30">
+                    <CardTitle className="font-display text-sm font-bold text-foreground uppercase tracking-wider">New Assessment Question</CardTitle>
                   </CardHeader>
 
                   <CardContent className="p-6">
                     <form onSubmit={handleCreateQuestion} className="space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-foreground">Question Prompt</label>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-foreground">Question Prompt</label>
                         <Textarea
                           placeholder="e.g. Which of the following statements is true regarding static typing?"
                           rows={2}
                           value={questionPrompt}
                           onChange={(e) => setQuestionPrompt(e.target.value)}
+                          className="rounded-md"
                           required
                         />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-foreground">Question Type</label>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-foreground">Question Type</label>
                           <select
-                            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-primary shadow-xs"
                             value={questionType}
                             onChange={(e) => handleTypeChange(e.target.value as QuestionType)}
                           >
@@ -425,22 +430,23 @@ export default function InstructorQuizEditorPage({
                           </select>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-foreground">Points</label>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-foreground">Points</label>
                           <Input
                             type="number"
                             min="1"
                             value={questionPoints}
                             onChange={(e) => setQuestionPoints(parseInt(e.target.value) || 1)}
+                            className="rounded-md"
                           />
                         </div>
                       </div>
 
                       {/* Options Builder */}
-                      <div className="space-y-2 pt-2 border-t border-border/40">
+                      <div className="space-y-2.5 pt-3 border-t border-border">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-foreground">
-                            Options (Select which option is correct)
+                          <label className="text-xs font-bold uppercase tracking-wider text-foreground">
+                            Options (Click number/icon to mark correct)
                           </label>
                           {questionType !== 'TRUE_FALSE' && (
                             <Button
@@ -448,7 +454,7 @@ export default function InstructorQuizEditorPage({
                               variant="ghost"
                               size="sm"
                               onClick={handleAddOption}
-                              className="text-xs h-7"
+                              className="text-xs h-7 rounded-md font-semibold text-primary hover:text-primary hover:bg-primary/10"
                             >
                               <Plus className="h-3 w-3 mr-1" />
                               Add Option
@@ -456,16 +462,16 @@ export default function InstructorQuizEditorPage({
                           )}
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {options.map((opt, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
+                            <div key={idx} className="flex items-center gap-2.5">
                               <button
                                 type="button"
                                 onClick={() => handleToggleOptionCorrect(idx)}
-                                className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-bold transition-colors ${
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-xs font-bold transition-all shadow-xs ${
                                   opt.isCorrect
-                                    ? 'bg-emerald-500 text-white border-emerald-600'
-                                    : 'border-border text-muted-foreground hover:bg-muted'
+                                    ? 'bg-emerald-600 text-white border-emerald-700'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
                                 }`}
                                 title={opt.isCorrect ? 'Correct option' : 'Click to mark correct'}
                               >
@@ -476,7 +482,7 @@ export default function InstructorQuizEditorPage({
                                 placeholder={`Option ${idx + 1} text`}
                                 value={opt.text}
                                 onChange={(e) => handleOptionTextChange(idx, e.target.value)}
-                                className="h-9 text-xs flex-1"
+                                className="h-9 text-xs flex-1 rounded-md"
                                 required
                               />
 
@@ -486,7 +492,7 @@ export default function InstructorQuizEditorPage({
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleRemoveOption(idx)}
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  className="h-9 w-9 text-muted-foreground hover:text-destructive rounded-md"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -496,8 +502,8 @@ export default function InstructorQuizEditorPage({
                         </div>
                       </div>
 
-                      <div className="space-y-1 pt-2">
-                        <label className="text-xs font-semibold text-foreground">
+                      <div className="space-y-1.5 pt-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-foreground">
                           Explanation (Revealed to student after quiz submission)
                         </label>
                         <Textarea
@@ -505,19 +511,21 @@ export default function InstructorQuizEditorPage({
                           rows={2}
                           value={questionExplanation}
                           onChange={(e) => setQuestionExplanation(e.target.value)}
+                          className="rounded-md"
                         />
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-3 border-t border-border/40">
+                      <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           onClick={() => setShowAddQuestion(false)}
+                          className="rounded-md font-semibold"
                         >
                           Cancel
                         </Button>
-                        <Button type="submit" size="sm" disabled={isSubmittingQuestion}>
+                        <Button type="submit" size="sm" disabled={isSubmittingQuestion} className="rounded-md font-semibold px-4">
                           {isSubmittingQuestion ? 'Saving...' : 'Save Question'}
                         </Button>
                       </div>
@@ -528,23 +536,23 @@ export default function InstructorQuizEditorPage({
 
               {/* Questions List */}
               {quiz.questions?.length === 0 ? (
-                <div className="p-12 text-center border border-dashed rounded-xl bg-muted/10">
-                  <HelpCircle className="mx-auto h-10 w-10 text-muted-foreground/60" />
-                  <h3 className="mt-3 text-sm font-semibold text-foreground">No questions yet</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
+                <div className="p-12 text-center border border-dashed border-border rounded-lg bg-card/60">
+                  <HelpCircle className="mx-auto h-10 w-10 text-primary/60 mb-2" />
+                  <h3 className="font-display text-base font-bold text-foreground">No questions yet</h3>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                     Click &quot;Add Question&quot; above to create your first quiz question.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {quiz.questions?.map((q, idx) => (
-                    <Card key={q.id} className="border-border/60 shadow-sm">
-                      <CardHeader className="py-3 px-5 flex flex-row items-center justify-between bg-muted/20 border-b border-border/40">
-                        <div className="flex items-center space-x-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
+                    <Card key={q.id} className="rounded-lg border border-border shadow-xs bg-card overflow-hidden">
+                      <CardHeader className="py-3 px-5 flex flex-row items-center justify-between bg-muted/20 border-b border-border">
+                        <div className="flex items-center space-x-2.5">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary text-xs font-bold border border-primary/20">
                             {idx + 1}
                           </span>
-                          <span className="text-xs font-semibold text-foreground">
+                          <span className="text-xs font-bold text-foreground">
                             {q.type.replace('_', ' ')} &bull; {q.points} {q.points === 1 ? 'pt' : 'pts'}
                           </span>
                         </div>
@@ -553,29 +561,29 @@ export default function InstructorQuizEditorPage({
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDeleteQuestion(q.id)}
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive rounded-md"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </CardHeader>
 
-                      <CardContent className="p-4 space-y-3">
-                        <p className="text-sm font-medium text-foreground">{q.prompt}</p>
+                      <CardContent className="p-5 space-y-3.5">
+                        <p className="text-sm font-semibold text-foreground leading-relaxed">{q.prompt}</p>
 
-                        <div className="space-y-1.5 pl-2">
+                        <div className="space-y-2 pl-2">
                           {q.options.map((opt) => (
                             <div
                               key={opt.id}
-                              className={`flex items-center space-x-2 text-xs p-1.5 rounded-md ${
+                              className={`flex items-center space-x-2.5 text-xs p-2.5 rounded-md border transition-colors ${
                                 opt.isCorrect
-                                  ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-semibold'
-                                  : 'text-muted-foreground'
+                                  ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-semibold border-emerald-500/30'
+                                  : 'text-muted-foreground border-border bg-muted/10'
                               }`}
                             >
                               {opt.isCorrect ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                               ) : (
-                                <div className="h-2 w-2 rounded-full bg-muted-foreground/40 flex-shrink-0 ml-1" />
+                                <div className="h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0 ml-1" />
                               )}
                               <span>{opt.text}</span>
                             </div>
@@ -583,8 +591,8 @@ export default function InstructorQuizEditorPage({
                         </div>
 
                         {q.explanation && (
-                          <div className="text-[11px] text-muted-foreground bg-muted/30 p-2 rounded-md border border-border/40">
-                            <span className="font-semibold text-foreground">Explanation: </span>
+                          <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-md border border-border">
+                            <span className="font-bold text-primary">Explanation: </span>
                             {q.explanation}
                           </div>
                         )}

@@ -147,8 +147,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
         <div className="h-10 w-2/3 bg-muted rounded-md" />
         <div className="h-6 w-1/3 bg-muted rounded-md" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-          <div className="lg:col-span-2 h-96 bg-muted rounded-xl" />
-          <div className="h-64 bg-muted rounded-xl" />
+          <div className="lg:col-span-2 h-96 bg-muted rounded-lg" />
+          <div className="h-64 bg-muted rounded-lg" />
         </div>
       </div>
     );
@@ -156,11 +156,16 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
 
   if (!course) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-24 text-center">
+      <div className="container mx-auto max-w-xl px-4 py-24 text-center space-y-4">
+        <div className="p-4 rounded-lg bg-destructive/10 text-destructive w-fit mx-auto">
+          <BookOpen className="h-8 w-8" />
+        </div>
         <h2 className="text-2xl font-bold text-foreground">Course Not Found</h2>
-        <p className="mt-2 text-muted-foreground">The course you are looking for does not exist or has been unpublished.</p>
-        <Link href="/courses" className="mt-6 inline-block">
-          <Button>Back to Courses</Button>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          The course you are looking for does not exist or has been unpublished by the instructor.
+        </p>
+        <Link href="/courses" className="inline-block pt-2">
+          <Button className="rounded-md">Browse All Courses</Button>
         </Link>
       </div>
     );
@@ -173,63 +178,73 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
   return (
     <div className="min-h-screen bg-background">
       {/* Course Hero */}
-      <section className="border-b border-border/40 bg-gradient-to-b from-primary/5 via-background to-background py-12 lg:py-16">
+      <section className="border-b border-border bg-[#FFFDF8] py-12 lg:py-16">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
-            {/* Left 2 Cols: Title, Instructor, Description */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="text-xs uppercase tracking-wider font-semibold">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+            {/* Left 8 Cols: Title, Instructor, Description */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Badge variant="outline" className="text-xs uppercase tracking-wider font-semibold px-3 py-1 rounded-md border-border bg-card">
                   {course.level}
                 </Badge>
                 {course.isEnrolled && (
-                  <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                  <Badge className="bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border-emerald-500/30 px-3 py-1 rounded-md font-semibold">
                     Enrolled
                   </Badge>
                 )}
+                <span className="text-xs text-muted-foreground font-mono">
+                  {course.modules.length} Modules &bull; {totalLessonsCount} Lessons
+                </span>
               </div>
 
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground font-display leading-[1.18]">
                 {course.title}
               </h1>
 
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-3xl">
                 {course.shortSummary || course.description}
               </p>
 
               {/* Instructor Box */}
-              <div className="flex items-center space-x-3 pt-2">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-base shadow-sm">
+              <div className="flex items-center space-x-3.5 pt-2">
+                <div className="flex h-11 w-11 items-center justify-center rounded-md bg-[#111111] text-white font-bold text-sm border border-border">
                   {course.instructor.firstName[0]}
                   {course.instructor.lastName[0]}
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-foreground">
+                  <div className="text-sm font-bold text-foreground">
                     {course.instructor.firstName} {course.instructor.lastName}
                   </div>
-                  <div className="text-xs text-muted-foreground">Instructor</div>
+                  <div className="text-xs text-muted-foreground">Course Instructor & Subject Specialist</div>
                 </div>
               </div>
             </div>
 
-            {/* Right 1 Col: Enrollment Card */}
-            <div className="lg:col-span-1">
-              <Card className="border-border/60 shadow-lg sticky top-24">
-                <CardHeader className="space-y-2">
-                  <div className="text-2xl font-bold text-foreground">
-                    {course.price === 0 ? 'Free' : `$${course.price}`}
+            {/* Right 4 Cols: Sticky Enrollment Card */}
+            <div className="lg:col-span-4">
+              <Card className="border-border sticky top-24 rounded-lg overflow-hidden shadow-sm bg-card">
+                <CardHeader className="space-y-2 pb-4 bg-muted/40 border-b border-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Access Option</span>
+                    <span className="text-2xl font-extrabold text-foreground font-display">
+                      {course.price === 0 ? (
+                        <span className="text-emerald-700">Free</span>
+                      ) : (
+                        `$${course.price}`
+                      )}
+                    </span>
                   </div>
-                  <CardDescription>
-                    Full lifetime access to all lessons, resources, and AI tutor assistance.
+                  <CardDescription className="text-xs leading-relaxed text-muted-foreground">
+                    Full lifetime access to structured syllabus, formative practice quizzes, and grounded Socratic AI tutoring.
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-5">
                   {course.isEnrolled ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3.5">
                       <div className="flex items-center justify-between text-xs font-semibold">
                         <span className="text-muted-foreground">Your Progress</span>
-                        <span className="text-primary">{progress?.progressPercentage || 0}%</span>
+                        <span className="text-primary font-bold">{progress?.progressPercentage || 0}%</span>
                       </div>
                       <Progress value={progress?.progressPercentage || 0} />
                       <div className="text-xs text-muted-foreground">
@@ -239,9 +254,9 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
                       {firstLesson && (
                         <Link
                           href={`/courses/${course.slug}/lessons/${firstLesson.id}`}
-                          className="w-full block"
+                          className="w-full block pt-1"
                         >
-                          <Button className="w-full space-x-2">
+                          <Button className="w-full space-x-2 rounded-md font-semibold bg-[#111111] text-white hover:bg-black">
                             <span>Continue Learning</span>
                             <ArrowRight className="h-4 w-4" />
                           </Button>
@@ -256,25 +271,25 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
                       <Button
                         onClick={handleEnroll}
                         disabled={isEnrolling}
-                        className="w-full text-base py-5 font-semibold shadow-md"
+                        className="w-full py-5 font-bold rounded-md bg-[#111111] text-white hover:bg-black transition-colors"
                       >
-                        {isEnrolling ? 'Enrolling...' : 'Enroll Now'}
+                        {isEnrolling ? 'Enrolling...' : 'Enroll in Course'}
                       </Button>
                     </div>
                   )}
 
-                  <div className="space-y-2.5 border-t border-border/40 pt-4 text-xs text-muted-foreground">
-                    <div className="flex items-center space-x-2">
-                      <BookOpen className="h-4 w-4 text-primary" />
+                  <div className="space-y-2.5 border-t border-border pt-4 text-xs text-muted-foreground">
+                    <div className="flex items-center space-x-2.5">
+                      <BookOpen className="h-4 w-4 text-primary flex-shrink-0" />
                       <span>{course.modules.length} Modules &bull; {totalLessonsCount} Lessons</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      <span>Context-Aware AI Tutor Grounding</span>
+                    <div className="flex items-center space-x-2.5">
+                      <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Grounded Socratic AI Tutor Assistance</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <ShieldCheck className="h-4 w-4 text-primary" />
-                      <span>Certificate of Completion Eligible</span>
+                    <div className="flex items-center space-x-2.5">
+                      <ShieldCheck className="h-4 w-4 text-emerald-700 flex-shrink-0" />
+                      <span>Verified Course Completion Record</span>
                     </div>
                   </div>
                 </CardContent>
@@ -288,30 +303,35 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
       <section className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-4xl space-y-8">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Course Curriculum</h2>
+            <div className="inline-flex items-center space-x-2 text-xs font-semibold text-primary uppercase tracking-wider mb-1">
+              <span>Course Syllabus</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground font-display">
+              Curriculum & Learning Units
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {course.modules.length} modules &bull; {totalLessonsCount} lessons
+              {course.modules.length} modules &bull; {totalLessonsCount} structured lessons
             </p>
           </div>
 
           <div className="space-y-4">
             {course.modules.map((moduleItem, index) => (
-              <Card key={moduleItem.id} className="border-border/60">
-                <CardHeader className="py-4 px-6 bg-muted/30 rounded-t-xl">
+              <Card key={moduleItem.id} className="border-border rounded-lg overflow-hidden shadow-xs bg-card">
+                <CardHeader className="py-4 px-6 bg-muted/30 border-b border-border">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold">
+                    <CardTitle className="text-base font-bold text-foreground">
                       Module {index + 1}: {moduleItem.title}
                     </CardTitle>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground font-medium font-mono">
                       {moduleItem.lessons?.length || 0} lessons
                     </span>
                   </div>
                   {moduleItem.description && (
-                    <CardDescription className="text-xs">{moduleItem.description}</CardDescription>
+                    <CardDescription className="text-xs pt-0.5 leading-relaxed text-muted-foreground">{moduleItem.description}</CardDescription>
                   )}
                 </CardHeader>
 
-                <CardContent className="p-0 divide-y divide-border/40">
+                <CardContent className="p-0 divide-y divide-border">
                   {moduleItem.lessons.map((lesson) => {
                     const isCompleted = progress?.completedLessonIds?.includes(lesson.id);
                     const canAccess = course.isEnrolled || lesson.isFreePreview;
@@ -324,30 +344,30 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
                             : 'opacity-75 cursor-not-allowed bg-muted/10'
                         }`}
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-3.5 min-w-0">
                           {isCompleted ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 flex-shrink-0" />
                           ) : lesson.type === 'VIDEO' ? (
-                            <PlayCircle className="h-4 w-4 text-primary flex-shrink-0" />
+                            <PlayCircle className="h-4.5 w-4.5 text-primary flex-shrink-0" />
                           ) : (
-                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <FileText className="h-4.5 w-4.5 text-muted-foreground flex-shrink-0" />
                           )}
 
-                          <span className={`text-sm font-medium ${isCompleted ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                          <span className={`text-sm font-medium truncate ${isCompleted ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
                             {lesson.title}
                           </span>
 
                           {lesson.isFreePreview && !course.isEnrolled && (
-                            <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                            <Badge variant="outline" className="text-[10px] text-primary border-primary/30 rounded-md px-2 py-0">
                               Free Preview
                             </Badge>
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                        <div className="flex items-center space-x-3 text-xs text-muted-foreground flex-shrink-0 ml-3">
                           {lesson.videoDuration ? (
-                            <span className="flex items-center space-x-1">
-                              <Clock className="h-3 w-3" />
+                            <span className="flex items-center space-x-1 font-mono">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
                               <span>{Math.round(lesson.videoDuration / 60)} min</span>
                             </span>
                           ) : null}
@@ -382,3 +402,4 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
     </div>
   );
 }
+
