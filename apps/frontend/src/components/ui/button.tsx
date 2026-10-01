@@ -12,7 +12,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99] select-none';
 
     const variants = {
-      // Primary button is solid near-black: crisp, confident, student-first
+      // Primary button is solid near-black: crisp, confident, purposeful
       default:
         'bg-[#111111] text-white hover:bg-[#262626] shadow-xs',
       // Emphasized red call-to-action

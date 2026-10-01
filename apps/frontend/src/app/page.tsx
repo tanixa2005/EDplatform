@@ -57,7 +57,7 @@ export default function HomePage() {
               {/* Category pill */}
               <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded bg-brand-50 border border-brand-200/80 text-brand-700 text-xs font-bold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <span>Student-First Indian EdTech</span>
+                <span>AI-Powered Education Platform</span>
               </div>
 
               {/* Natural, confident headline */}

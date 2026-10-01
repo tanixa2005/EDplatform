@@ -14,7 +14,7 @@ export function Footer() {
               <EdLogo size={24} showWordmark={true} />
             </Link>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-md">
-              A student-first Indian EdTech platform engineered for authentic mastery. Learn through structured video lectures, test comprehension through formative checkpoint quizzes, and progress with confidence.
+              An AI-powered education platform engineered for authentic mastery. Learn through structured video lectures, test comprehension through formative checkpoint quizzes, and progress with confidence.
             </p>
 
             <div className="pt-1 space-y-1.5 text-xs">
