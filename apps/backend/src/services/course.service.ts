@@ -103,7 +103,10 @@ export class CourseService {
     };
 
     if (query?.level) {
-      whereClause.level = query.level;
+      const normalizedLevel = query.level.trim().toUpperCase();
+      if (['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(normalizedLevel)) {
+        whereClause.level = normalizedLevel;
+      }
     }
 
     if (query?.categoryId) {

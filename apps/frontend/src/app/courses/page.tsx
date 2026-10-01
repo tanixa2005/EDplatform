@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, BookOpen, BarChart3, ArrowRight } from 'lucide-react';
+import { Search, BookOpen, BarChart3, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -34,28 +34,34 @@ interface CourseListItem {
 export default function CoursesPage() {
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
 
-  useEffect(() => {
-    async function loadCourses() {
-      try {
-        setIsLoading(true);
-        const data = await fetchApi<{ courses: CourseListItem[] }>('/courses');
-        setCourses(data.courses || []);
-      } catch (err) {
-        console.error('Failed to load courses', err);
-      } finally {
-        setIsLoading(false);
-      }
+  const loadCourses = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await fetchApi<{ courses: CourseListItem[] }>('/courses');
+      setCourses(data?.courses || []);
+    } catch (err: unknown) {
+      console.error('Failed to load courses', err);
+      setError('Failed to load courses. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadCourses();
   }, []);
 
   const filteredCourses = courses.filter((course) => {
-    const matchesSearch =
-      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const titleMatch = (course.title || '').toLowerCase().includes(q);
+    const descMatch = (course.description || '').toLowerCase().includes(q);
+    const summaryMatch = (course.shortSummary || '').toLowerCase().includes(q);
+    const matchesSearch = !q || titleMatch || descMatch || summaryMatch;
     const matchesLevel = selectedLevel === 'ALL' || course.level === selectedLevel;
     return matchesSearch && matchesLevel;
   });
@@ -128,6 +134,21 @@ export default function CoursesPage() {
               </div>
             ))}
           </div>
+        ) : error && courses.length === 0 ? (
+          <div className="text-center py-16 border border-dashed border-red-300 dark:border-red-900/60 rounded-md bg-card max-w-md mx-auto p-6 space-y-3">
+            <AlertCircle className="mx-auto h-10 w-10 text-primary" />
+            <h3 className="text-base font-bold text-foreground">Failed to Load Courses</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">{error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadCourses}
+              className="mt-2 rounded-md text-xs font-semibold"
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              <span>Retry</span>
+            </Button>
+          </div>
         ) : filteredCourses.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-md bg-card max-w-md mx-auto p-6 space-y-3">
             <BookOpen className="mx-auto h-10 w-10 text-muted-foreground" />
@@ -153,6 +174,11 @@ export default function CoursesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCourses.map((course) => {
               const badge = levelBadges[course.level] || levelBadges.BEGINNER;
+              const instructorName = course.instructor
+                ? `${course.instructor.firstName || ''} ${course.instructor.lastName || ''}`.trim() || 'Instructor'
+                : 'Instructor';
+              const initial = instructorName[0] || 'I';
+
               return (
                 <Card
                   key={course.id}
@@ -186,16 +212,16 @@ export default function CoursesPage() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border pt-3">
                       <div className="flex items-center space-x-1.5">
                         <div className="flex h-5 w-5 items-center justify-center rounded bg-foreground text-background font-bold text-[10px]">
-                          {course.instructor.firstName[0]}
+                          {initial}
                         </div>
                         <span className="font-medium text-foreground text-xs truncate max-w-[130px]">
-                          {course.instructor.firstName} {course.instructor.lastName}
+                          {instructorName}
                         </span>
                       </div>
 
                       <span className="flex items-center space-x-1 text-xs text-muted-foreground">
                         <BarChart3 className="h-3 w-3 text-primary" />
-                        <span>{course.level.toLowerCase()}</span>
+                        <span>{course.level ? course.level.toLowerCase() : 'all'}</span>
                       </span>
                     </div>
                   </CardContent>

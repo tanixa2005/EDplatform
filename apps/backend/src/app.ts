@@ -15,7 +15,8 @@ export function createApp(): Express {
   // Security headers
   app.use(
     helmet({
-      contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false
+      contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' }
     })
   );
 
