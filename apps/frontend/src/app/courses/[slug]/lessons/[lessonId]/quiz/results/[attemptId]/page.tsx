@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ProtectedRoute } from '@/components/auth/protected-route';
+
 import { fetchApi } from '@/lib/api';
 import { MistakeAnalysisModal } from '@/components/ai/mistake-analysis-modal';
 import { QuizAttemptResultDto } from '@edplatform/shared';
@@ -77,7 +77,7 @@ export default function QuizResultPage({
   const totalQuestions = result.questions.length;
 
   return (
-    <ProtectedRoute>
+    <>
       <div className="min-h-screen bg-background py-10">
         <div className="container mx-auto max-w-4xl px-4 sm:px-6 space-y-8">
           {/* Header Back Link & Navigation */}
@@ -330,6 +330,6 @@ export default function QuizResultPage({
         isOpen={diagnosticOpen}
         onClose={() => setDiagnosticOpen(false)}
       />
-    </ProtectedRoute>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.config.js';
 import { apiRouter } from './routes/index.js';
+import { webhookRouter } from './routes/webhook.routes.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 
 export function createApp(): Express {
@@ -32,6 +33,10 @@ export function createApp(): Express {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
     })
   );
+
+  // Clerk webhooks must be mounted BEFORE express.json(): svix verifies the
+  // signature against the raw request bytes, which a JSON parse would destroy.
+  app.use('/api/v1/webhooks', webhookRouter);
 
   // Middleware pipeline
   app.use(express.json({ limit: '2mb' }));

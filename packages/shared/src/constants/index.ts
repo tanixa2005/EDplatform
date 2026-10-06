@@ -1,4 +1,5 @@
 export * from './progress.constants.js';
+export * from './class-profiles.js';
 
 export const USER_ROLES = {
   STUDENT: 'STUDENT',

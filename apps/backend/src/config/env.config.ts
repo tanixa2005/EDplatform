@@ -15,7 +15,13 @@ const envSchema = z
     COOKIE_SECURE: z.string().optional().transform((val) => val === 'true'),
     COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     COOKIE_DOMAIN: z.string().optional().transform((val) => (val && val.trim() !== '' ? val : undefined)),
-    GEMINI_API_KEY: z.string().optional().default('')
+    GEMINI_API_KEY: z.string().optional().default(''),
+
+    // Clerk. Optional so the app still boots (and builds) without them during
+    // the migration; requests then fall back to the legacy JWT cookie.
+    CLERK_SECRET_KEY: z.string().optional().default(''),
+    CLERK_PUBLISHABLE_KEY: z.string().optional().default(''),
+    CLERK_WEBHOOK_SECRET: z.string().optional().default('')
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production') {
@@ -31,6 +37,13 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ['JWT_SECRET'],
           message: 'JWT_SECRET must be at least 32 characters long in production.'
+        });
+      }
+      if (data.CLERK_SECRET_KEY && !data.CLERK_SECRET_KEY.startsWith('sk_')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['CLERK_SECRET_KEY'],
+          message: 'CLERK_SECRET_KEY must be a Clerk secret key starting with "sk_".'
         });
       }
       if (data.DATABASE_URL.includes('localhost') || data.DATABASE_URL.includes('127.0.0.1')) {
@@ -51,3 +64,6 @@ if (!parsedEnv.success) {
 }
 
 export const env = parsedEnv.data;
+
+/** True once Clerk is configured; drives the dual-auth fallback during migration. */
+export const isClerkEnabled = env.CLERK_SECRET_KEY.trim() !== '';

@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { fetchApi } from '@/lib/api';
-import { useAuth } from '@/context/auth-context';
+import { useStudent } from '@/context/student-context';
 
 interface LessonItem {
   id: string;
@@ -73,7 +73,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ slug: s
   const resolvedParams = React.use(params);
   const slug = resolvedParams.slug;
   const router = useRouter();
-  const { user } = useAuth();
+  const { student: user } = useStudent();
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [progress, setProgress] = useState<CourseProgress | null>(null);

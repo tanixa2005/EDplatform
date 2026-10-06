@@ -12,6 +12,12 @@ Configure these variables in your frontend hosting environment (e.g., Vercel Pro
 | :--- | :---: | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | **Yes** | `https://api.yourdomain.com/api/v1` | Base URL for all backend API endpoints. |
 | `NEXT_PUBLIC_APP_URL` | No | `https://yourdomain.com` | Canonical frontend domain for metadata and links. |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | **Yes** | `pk_live_...` | Clerk publishable key. Safe to expose; it identifies the Clerk instance. |
+| `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Clerk secret key, used by `clerkMiddleware()` in the Next.js server runtime. Never exposed to the browser. |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | No | `/sign-in` | Sign-in route. |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | No | `/sign-up` | Sign-up route. |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | No | `/` | Where a returning student lands after sign-in. |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | No | `/onboarding` | New students go straight to onboarding. |
 
 > [!IMPORTANT]
 > **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
@@ -34,6 +40,32 @@ Configure these variables in your backend hosting environment (e.g., Render, Rai
 | `COOKIE_SAME_SITE` | **Yes** | `lax` or `none` | Set to `lax` for same-domain setups, or `none` if frontend and backend have different domains. |
 | `COOKIE_DOMAIN` | No | `.yourdomain.com` | Optional shared root domain for subdomains. Leave unset for host-only cookies. |
 | `GEMINI_API_KEY` | No | `AIzaSy...` | Google Gemini API key. If omitted, AI Tutor falls back safely to Mock provider. |
+| `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Verifies Clerk session tokens locally against the cached JWKS. While unset, the backend falls back to the legacy JWT cookie. |
+| `CLERK_PUBLISHABLE_KEY` | No | `pk_live_...` | Clerk instance identifier. |
+| `CLERK_WEBHOOK_SECRET` | **Yes** | `whsec_...` | Svix signing secret for the `user.created` / `user.updated` / `user.deleted` webhook. Without it the webhook endpoint refuses every request. |
+
+> [!IMPORTANT]
+> **Cookies are no longer used for API authentication.** The frontend sends the
+> Clerk session token as `Authorization: Bearer <token>`, so the Clerk session
+> cookie stays first-party on the frontend origin. `COOKIE_SECURE`,
+> `COOKIE_SAME_SITE` and `COOKIE_DOMAIN` now only affect the legacy
+> email/password login, which remains available until the Clerk flow is verified
+> in production.
+
+### Clerk webhook setup
+
+In the Clerk dashboard, add an endpoint pointing at:
+
+```
+https://<your-backend-host>/api/v1/webhooks/clerk
+```
+
+Subscribe to `user.created`, `user.updated` and `user.deleted`, then copy the
+signing secret into `CLERK_WEBHOOK_SECRET`. The route is mounted before
+`express.json()` because Svix verifies the signature against the raw request body.
+
+If the webhook is slow or misconfigured, the backend still creates the student
+record lazily on the first authenticated request, so sign-up is never blocked.
 
 ---
 

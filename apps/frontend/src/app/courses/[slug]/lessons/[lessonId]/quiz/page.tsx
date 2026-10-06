@@ -17,9 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { ProtectedRoute } from '@/components/auth/protected-route';
+
 import { fetchApi } from '@/lib/api';
-import { AITutorDrawer } from '@/components/ai/ai-tutor-drawer';
+import { QuizHintPanel } from '@/components/tutor/quiz-hint-panel';
 import {
   QuizDetailStudentDto,
   QuizAttemptSummaryDto,
@@ -210,7 +210,7 @@ export default function QuizPlayerPage({
   const bestAttempt = attemptsHistory.find((a) => a.isPassed) || attemptsHistory[0];
 
   return (
-    <ProtectedRoute>
+    <>
       <div className="min-h-screen bg-background py-8 sm:py-10">
         <div className="container mx-auto max-w-4xl px-4 sm:px-6 space-y-6">
           {/* Top Bar */}
@@ -538,16 +538,13 @@ export default function QuizPlayerPage({
         </div>
       </div>
 
-      <AITutorDrawer
+      <QuizHintPanel
         isOpen={aiTutorOpen}
         onClose={() => setAiTutorOpen(false)}
         lessonId={lessonId}
-        lessonTitle={quiz.title}
-        mode="quiz"
         questionId={currentQuestion?.id}
-        questionPrompt={currentQuestion?.prompt}
       />
-    </ProtectedRoute>
+    </>
   );
 }
 

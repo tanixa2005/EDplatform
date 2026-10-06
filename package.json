@@ -14,7 +14,11 @@
     "build": "npm run build --workspace=@edplatform/shared && npm run prisma:generate --workspace=@edplatform/backend && npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspace=apps/backend",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:check": "npm run db:check --workspace=@edplatform/backend",
+    "db:status": "npm run db:status --workspace=@edplatform/backend",
+    "db:deploy": "npm run db:deploy --workspace=@edplatform/backend",
+    "db:diff": "npm run db:diff --workspace=@edplatform/backend"
   },
   "keywords": [
     "education",

@@ -3,6 +3,8 @@ export type UserRole = 'STUDENT' | 'INSTRUCTOR' | 'ADMIN';
 export interface SafeUser {
   id: string;
   email: string;
+  /** Clerk user id, or null for a legacy account that has not signed in via Clerk yet. */
+  clerkUserId: string | null;
   firstName: string;
   lastName: string;
   avatarUrl: string | null;

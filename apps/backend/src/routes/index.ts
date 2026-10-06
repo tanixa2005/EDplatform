@@ -10,6 +10,8 @@ import { questionRouter } from './question.routes.js';
 import { attemptRouter } from './attempt.routes.js';
 import { aiRouter } from './ai.routes.js';
 import { dashboardRouter } from './dashboard.routes.js';
+import { studentRouter } from './student.routes.js';
+import { tutorRouter } from './tutor.routes.js';
 
 export const apiRouter = Router();
 
@@ -25,3 +27,7 @@ apiRouter.use('/questions', questionRouter);
 apiRouter.use('/attempts', attemptRouter);
 apiRouter.use('/ai', aiRouter);
 apiRouter.use('/dashboard', dashboardRouter);
+
+// Student-only product surfaces
+apiRouter.use('/me', studentRouter);
+apiRouter.use('/tutor', tutorRouter);

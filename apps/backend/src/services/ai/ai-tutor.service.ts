@@ -6,31 +6,15 @@ import {
   SafeUser,
 } from '@edplatform/shared';
 import { prisma } from '../../config/prisma.config.js';
-import { env } from '../../config/env.config.js';
 import {
   NotFoundError,
   ForbiddenError,
   BadRequestError,
 } from '../../errors/app.error.js';
-import { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
-import { GeminiAITutorProvider } from './gemini.provider.js';
-import { MockAITutorProvider } from './mock.provider.js';
+import { StreamParams } from './ai-provider.interface.js';
+import { primaryProvider, streamWithFallback } from './provider.factory.js';
 
 export class AITutorService {
-  private primaryProvider: IAITutorProvider;
-  private mockProvider: MockAITutorProvider;
-
-  constructor() {
-    this.mockProvider = new MockAITutorProvider();
-
-    if (env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim() !== '') {
-      this.primaryProvider = new GeminiAITutorProvider(env.GEMINI_API_KEY);
-      console.log('🤖 AI Tutor initialized with official Gemini provider');
-    } else {
-      this.primaryProvider = this.mockProvider;
-      console.log('🤖 AI Tutor initialized with Mock provider (GEMINI_API_KEY not set)');
-    }
-  }
 
   /**
    * Stream AI Tutor response via Server-Sent Events (SSE)
@@ -66,12 +50,10 @@ export class AITutorService {
 
     const course = lesson.module.course;
 
-    // 2. Authorization check: User must be enrolled or course instructor or admin
+    // 2. Authorization check: the student must be enrolled in this course.
     const isEnrolled = course.enrollments.length > 0;
-    const isCourseInstructor = course.instructorId === user.id;
-    const isAdmin = user.role === 'ADMIN';
 
-    if (!isEnrolled && !isCourseInstructor && !isAdmin) {
+    if (!isEnrolled) {
       throw new ForbiddenError('You must be enrolled in this course to access the AI Tutor');
     }
 
@@ -150,12 +132,7 @@ CRITICAL RULES (STRICTLY ENFORCED):
       onChunk,
     };
 
-    try {
-      await this.primaryProvider.generateStream(streamParams);
-    } catch (err) {
-      console.warn(`[AITutorService] Primary provider failed, falling back to mock provider:`, err);
-      await this.mockProvider.generateStream(streamParams);
-    }
+    await streamWithFallback(streamParams);
   }
 
   /**
@@ -203,13 +180,8 @@ CRITICAL RULES (STRICTLY ENFORCED):
       throw new NotFoundError('Quiz attempt not found');
     }
 
-    // 2. Authorization check: Must be owner or instructor or admin
-    const course = attempt.quiz.lesson?.module.course || attempt.quiz.module?.course;
-    const isOwner = attempt.userId === user.id;
-    const isInstructor = course ? course.instructorId === user.id : false;
-    const isAdmin = user.role === 'ADMIN';
-
-    if (!isOwner && !isInstructor && !isAdmin) {
+    // 2. Authorization check: a student may only analyse their own attempt.
+    if (attempt.userId !== user.id) {
       throw new ForbiddenError('You are not authorized to view mistake analysis for this attempt');
     }
 
@@ -371,7 +343,7 @@ Instructor Explanation: ${q.explanation || 'None provided'}
     };
 
     try {
-      const rawResult = await this.primaryProvider.generateStructured<{
+      const rawResult = await primaryProvider.generateStructured<{
         generalFeedback: string;
         mistakes: Array<{
           questionId: string;

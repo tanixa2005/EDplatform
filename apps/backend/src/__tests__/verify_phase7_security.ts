@@ -15,6 +15,8 @@ interface TestContext {
   instructorAId: string;
   instructorBId: string;
   adminId: string;
+  /** Account created by the privilege-escalation check, so cleanup can prune it. */
+  privEscId: string;
 }
 
 const RESULTS: { category: string; test: string; status: 'PASSED' | 'FAILED'; error?: string }[] = [];
@@ -50,7 +52,8 @@ async function startServer(): Promise<TestContext> {
     studentBId: '',
     instructorAId: '',
     instructorBId: '',
-    adminId: ''
+    adminId: '',
+    privEscId: ''
   };
 }
 
@@ -136,7 +139,8 @@ async function runTests() {
       recordFail('Authentication', 'Student registration succeeds with HttpOnly auth_token and no passwordHash leak', err);
     }
 
-    // Client attempted privilege escalation to ADMIN is rejected by validation schema
+    // EDplatform is student-only: the register schema has no `role` field, so a
+    // role supplied by the client must be ignored and the account must be a STUDENT.
     try {
       const resPriv = await fetch(`${ctx.baseUrl}/auth/register`, {
         method: 'POST',
@@ -146,13 +150,20 @@ async function runTests() {
           password: testPassword,
           firstName: 'Hacker',
           lastName: 'Admin',
-          role: 'ADMIN' // Not permitted in register schema enum
+          role: 'ADMIN' // Must be ignored entirely
         })
       });
-      if (resPriv.status !== 400) throw new Error(`Expected 400 for unauthorized ADMIN self-registration, got ${resPriv.status}`);
-      recordPass('Authentication', 'Client privilege escalation (self-registering as ADMIN) rejected by schema');
+      if (resPriv.status !== 201) throw new Error(`Expected 201, got ${resPriv.status}`);
+      const privBody = await resPriv.json();
+      // Record the id before asserting, so the row is still pruned if the
+      // assertion below fails.
+      ctx.privEscId = privBody.data?.user?.id || '';
+      if (privBody.data.user.role !== 'STUDENT') {
+        throw new Error(`CRITICAL: client-supplied role honoured; got ${privBody.data.user.role}`);
+      }
+      recordPass('Authentication', 'Client-supplied role is ignored; every sign-up is a STUDENT');
     } catch (err) {
-      recordFail('Authentication', 'Client privilege escalation rejected by schema', err);
+      recordFail('Authentication', 'Client-supplied role is ignored; every sign-up is a STUDENT', err);
     }
 
     // Duplicate email registration
@@ -232,15 +243,21 @@ async function runTests() {
       ctx.adminCookie = extractCookie(resAdm);
       ctx.adminId = (await resAdm.json()).data.user.id;
 
-      // Authoritatively promote to ADMIN in DB
+      // Sign-up is student-only now, so the instructor/admin fixtures needed to
+      // author test content are promoted directly in the database. This mirrors
+      // production: curriculum content is seeded, never self-service.
+      await prisma.user.updateMany({
+        where: { id: { in: [ctx.instructorAId, ctx.instructorBId] } },
+        data: { role: 'INSTRUCTOR' }
+      });
       await prisma.user.update({
         where: { id: ctx.adminId },
         data: { role: 'ADMIN' }
       });
 
-      recordPass('Authentication', 'Registered multiple roles (STUDENT, INSTRUCTOR, ADMIN) with isolated sessions');
+      recordPass('Authentication', 'Content-authoring fixtures promoted in DB with isolated sessions');
     } catch (err) {
-      recordFail('Authentication', 'Registered multiple roles with isolated sessions', err);
+      recordFail('Authentication', 'Content-authoring fixtures promoted in DB with isolated sessions', err);
     }
 
     // Invalid password login
@@ -306,50 +323,40 @@ async function runTests() {
       recordFail('RBAC', 'Student cannot create courses (403 Forbidden)', err);
     }
 
-    // Student attempting to access Instructor Dashboard -> 403
+    // Student-only product: the instructor and admin analytics endpoints no
+    // longer exist. Assert they are gone for every role, not merely forbidden.
     try {
-      const res = await fetch(`${ctx.baseUrl}/dashboard/instructor`, {
-        headers: { Cookie: ctx.studentACookie }
-      });
-      if (res.status !== 403) throw new Error(`Expected 403 Forbidden, got ${res.status}`);
-      recordPass('RBAC', 'Student cannot access Instructor Dashboard (403 Forbidden)');
-    } catch (err) {
-      recordFail('RBAC', 'Student cannot access Instructor Dashboard (403 Forbidden)', err);
-    }
+      const removed = [
+        '/dashboard/instructor',
+        '/dashboard/instructor/courses/00000000-0000-0000-0000-000000000000',
+        '/dashboard/admin',
+        '/dashboard/admin/users',
+        '/dashboard/admin/courses',
+        '/dashboard/admin/activity'
+      ];
 
-    // Student attempting to access Admin Dashboard -> 403
-    try {
-      const res = await fetch(`${ctx.baseUrl}/dashboard/admin`, {
-        headers: { Cookie: ctx.studentACookie }
-      });
-      if (res.status !== 403) throw new Error(`Expected 403 Forbidden, got ${res.status}`);
-      recordPass('RBAC', 'Student cannot access Admin Dashboard (403 Forbidden)');
-    } catch (err) {
-      recordFail('RBAC', 'Student cannot access Admin Dashboard (403 Forbidden)', err);
-    }
-
-    // Instructor attempting to access Admin Dashboard -> 403
-    try {
-      const res = await fetch(`${ctx.baseUrl}/dashboard/admin`, {
-        headers: { Cookie: ctx.instructorACookie }
-      });
-      if (res.status !== 403) throw new Error(`Expected 403 Forbidden, got ${res.status}`);
-      recordPass('RBAC', 'Instructor cannot access Admin Dashboard (403 Forbidden)');
-    } catch (err) {
-      recordFail('RBAC', 'Instructor cannot access Admin Dashboard (403 Forbidden)', err);
-    }
-
-    // Admin can access all dashboards
-    try {
-      const resAdm = await fetch(`${ctx.baseUrl}/dashboard/admin`, { headers: { Cookie: ctx.adminCookie } });
-      const resInst = await fetch(`${ctx.baseUrl}/dashboard/instructor`, { headers: { Cookie: ctx.adminCookie } });
-      const resStud = await fetch(`${ctx.baseUrl}/dashboard/student`, { headers: { Cookie: ctx.adminCookie } });
-      if (resAdm.status !== 200 || resInst.status !== 200 || resStud.status !== 200) {
-        throw new Error(`Admin failed dashboard access checks: admin=${resAdm.status}, inst=${resInst.status}, stud=${resStud.status}`);
+      for (const cookie of [ctx.studentACookie, ctx.instructorACookie, ctx.adminCookie]) {
+        for (const path of removed) {
+          const res = await fetch(`${ctx.baseUrl}${path}`, { headers: { Cookie: cookie } });
+          if (res.status !== 404) {
+            throw new Error(`Expected 404 for removed route ${path}, got ${res.status}`);
+          }
+        }
       }
-      recordPass('RBAC', 'Admin has verified omni-role access to Student, Instructor, and Admin dashboards');
+      recordPass('Student-Only', 'Instructor and Admin analytics endpoints are removed (404 for all roles)');
     } catch (err) {
-      recordFail('RBAC', 'Admin has verified omni-role access to dashboards', err);
+      recordFail('Student-Only', 'Instructor and Admin analytics endpoints are removed', err);
+    }
+
+    // The student dashboard itself must still work.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/dashboard/student`, {
+        headers: { Cookie: ctx.studentACookie }
+      });
+      if (res.status !== 200) throw new Error(`Expected 200 for student dashboard, got ${res.status}`);
+      recordPass('Student-Only', 'Student progress dashboard still returns 200 OK');
+    } catch (err) {
+      recordFail('Student-Only', 'Student progress dashboard still returns 200 OK', err);
     }
 
     // ----------------------------------------------------
@@ -816,6 +823,264 @@ async function runTests() {
       recordFail('Error Sanitization', 'Zod validation errors returned cleanly', err);
     }
 
+    // ----------------------------------------------------
+    // TEST SUITE 10: Phase 1 - Student Profile & Persistent Tutor Sessions
+    // ----------------------------------------------------
+    console.log('\n[SUITE 10] Student Profile, Onboarding & Tutor Sessions');
+
+    let tutorSessionAId = '';
+
+    // A tutor session cannot start before the student has told us their class.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentBCookie },
+        body: JSON.stringify({ message: 'Teach me fractions' })
+      });
+      if (res.status !== 400) {
+        throw new Error(`Expected 400 before onboarding, got ${res.status}`);
+      }
+      recordPass('Onboarding', 'Tutor session is refused until the student has onboarded');
+    } catch (err) {
+      recordFail('Onboarding', 'Tutor session is refused until the student has onboarded', err);
+    }
+
+    // Onboarding requires at least one subject.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me/onboarding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({ classLevel: 'CLASS_7', subjects: [] })
+      });
+      if (res.status !== 400) throw new Error(`Expected 400 for empty subjects, got ${res.status}`);
+      recordPass('Onboarding', 'Onboarding rejects an empty subject list (400)');
+    } catch (err) {
+      recordFail('Onboarding', 'Onboarding rejects an empty subject list (400)', err);
+    }
+
+    // An invalid class level must be rejected rather than silently stored.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me/onboarding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({ classLevel: 'CLASS_12', subjects: ['MATH'] })
+      });
+      if (res.status !== 400) throw new Error(`Expected 400 for class 12, got ${res.status}`);
+      recordPass('Onboarding', 'Onboarding rejects a class level outside 6-8 (400)');
+    } catch (err) {
+      recordFail('Onboarding', 'Onboarding rejects a class level outside 6-8 (400)', err);
+    }
+
+    // Happy path, including duplicate subjects which must be de-duplicated.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me/onboarding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({
+          classLevel: 'CLASS_7',
+          subjects: ['MATH', 'SCIENCE', 'MATH'],
+          preferredLanguage: 'ENGLISH',
+          preferredExplanationStyle: 'STEP_BY_STEP'
+        })
+      });
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${await res.text()}`);
+      const body = await res.json();
+      const profile = body.data.profile;
+      if (profile.classLevel !== 'CLASS_7') throw new Error(`classLevel not stored: ${profile.classLevel}`);
+      if (profile.subjects.length !== 2) {
+        throw new Error(`Duplicate subject not de-duplicated: ${JSON.stringify(profile.subjects)}`);
+      }
+      if (!profile.onboardingCompletedAt) throw new Error('onboardingCompletedAt was not set');
+      recordPass('Onboarding', 'Onboarding persists class, subjects, language and style in PostgreSQL');
+    } catch (err) {
+      recordFail('Onboarding', 'Onboarding persists class, subjects, language and style in PostgreSQL', err);
+    }
+
+    // GET /me must reflect the profile and never leak the password hash.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me`, { headers: { Cookie: ctx.studentACookie } });
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const raw = await res.text();
+      if (raw.includes('passwordHash')) throw new Error('CRITICAL: passwordHash exposed by GET /me');
+      const body = JSON.parse(raw);
+      if (body.data.isOnboarded !== true) throw new Error('isOnboarded should be true after onboarding');
+      if (body.data.profile.classLevel !== 'CLASS_7') throw new Error('Class level missing from GET /me');
+      recordPass('Student Profile', 'GET /me returns the learning profile with no passwordHash leak');
+    } catch (err) {
+      recordFail('Student Profile', 'GET /me returns the learning profile with no passwordHash leak', err);
+    }
+
+    // PATCH /me updates preferences without re-running onboarding.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({ classLevel: 'CLASS_8' })
+      });
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const body = await res.json();
+      if (body.data.profile.classLevel !== 'CLASS_8') throw new Error('Class level was not updated');
+      if (body.data.profile.subjects.length !== 2) throw new Error('Subjects were lost by a partial update');
+      recordPass('Student Profile', 'PATCH /me updates class level and preserves subjects');
+    } catch (err) {
+      recordFail('Student Profile', 'PATCH /me updates class level and preserves subjects', err);
+    }
+
+    // Unauthenticated access to the profile must be refused.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me`);
+      if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`);
+      recordPass('Student Profile', 'Unauthenticated GET /me returns 401 Unauthorized');
+    } catch (err) {
+      recordFail('Student Profile', 'Unauthenticated GET /me returns 401 Unauthorized', err);
+    }
+
+    // Create a session and confirm the class level is snapshotted onto it.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({ message: 'Teach me how to add 3/4 and 2/5', subject: 'MATH' })
+      });
+      if (res.status !== 201) throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
+      const body = await res.json();
+      tutorSessionAId = body.data.session.id;
+      if (!tutorSessionAId) throw new Error('No session id returned');
+      if (body.data.session.classLevel !== 'CLASS_8') {
+        throw new Error(`Session did not snapshot the class level: ${body.data.session.classLevel}`);
+      }
+      if (body.data.session.title !== 'Teach me how to add 3/4 and 2/5') {
+        throw new Error(`Session title not derived from the question: ${body.data.session.title}`);
+      }
+      recordPass('Tutor Sessions', 'Session is created with a derived title and snapshotted class level');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'Session is created with a derived title and snapshotted class level', err);
+    }
+
+    // The session must be readable again - this is what survives a page refresh.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}`, {
+        headers: { Cookie: ctx.studentACookie }
+      });
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const body = await res.json();
+      if (body.data.session.id !== tutorSessionAId) throw new Error('Wrong session returned');
+      if (!Array.isArray(body.data.session.messages)) throw new Error('Transcript is not an array');
+      recordPass('Tutor Sessions', 'Session transcript is persisted and reloadable after a refresh');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'Session transcript is persisted and reloadable after a refresh', err);
+    }
+
+    // Cross-student isolation: the most important check in this suite.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}`, {
+        headers: { Cookie: ctx.studentBCookie }
+      });
+      if (res.status !== 403) {
+        throw new Error(`CRITICAL IDOR: Student B read Student A session, got ${res.status}`);
+      }
+      recordPass('IDOR Protection', 'Student B cannot read Student A tutor session (403 Forbidden)');
+    } catch (err) {
+      recordFail('IDOR Protection', 'Student B cannot read Student A tutor session (403 Forbidden)', err);
+    }
+
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentBCookie },
+        body: JSON.stringify({ message: 'What is the answer?' })
+      });
+      if (res.status !== 403) {
+        throw new Error(`CRITICAL IDOR: Student B streamed into Student A session, got ${res.status}`);
+      }
+      recordPass('IDOR Protection', 'Student B cannot post a turn into Student A session (403 Forbidden)');
+    } catch (err) {
+      recordFail('IDOR Protection', 'Student B cannot post a turn into Student A session (403 Forbidden)', err);
+    }
+
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}`);
+      if (res.status !== 401) throw new Error(`Expected 401, got ${res.status}`);
+      recordPass('Tutor Sessions', 'Unauthenticated session read returns 401 Unauthorized');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'Unauthenticated session read returns 401 Unauthorized', err);
+    }
+
+    // A turn must reject an empty payload rather than charging an AI call for it.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({})
+      });
+      if (res.status !== 400) throw new Error(`Expected 400 for an empty turn, got ${res.status}`);
+      recordPass('Tutor Sessions', 'A turn with neither a message nor an action is rejected (400)');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'A turn with neither a message nor an action is rejected (400)', err);
+    }
+
+    // One real streamed turn against the mock provider, then confirm BOTH turns
+    // were persisted. This is the regression guard for the dead-tables problem.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ctx.studentACookie },
+        body: JSON.stringify({ action: 'hint' })
+      });
+      if (res.status !== 200) throw new Error(`Expected 200 from stream, got ${res.status}`);
+
+      const text = await res.text();
+      if (!text.includes('data:')) throw new Error('Response was not an SSE stream');
+      if (!text.includes('[DONE]')) throw new Error('Stream did not terminate with [DONE]');
+
+      const detail = await fetch(`${ctx.baseUrl}/tutor/sessions/${tutorSessionAId}`, {
+        headers: { Cookie: ctx.studentACookie }
+      });
+      const messages = (await detail.json()).data.session.messages;
+      if (messages.length !== 2) {
+        throw new Error(`Expected 2 persisted messages, got ${messages.length}`);
+      }
+      if (messages[0].role !== 'STUDENT' || messages[0].mode !== 'hint') {
+        throw new Error(`Student turn not stored correctly: ${JSON.stringify(messages[0])}`);
+      }
+      if (messages[1].role !== 'ED' || !messages[1].content) {
+        throw new Error('ED reply was not persisted');
+      }
+      recordPass('Tutor Sessions', 'A streamed turn persists both the student question and ED reply');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'A streamed turn persists both the student question and ED reply', err);
+    }
+
+    // The home screen must be class-aware and list the session just created.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/tutor/home`, {
+        headers: { Cookie: ctx.studentACookie }
+      });
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const body = await res.json();
+      if (body.data.profile?.classLevel !== 'CLASS_8') throw new Error('Home context is not class-aware');
+      if (!Array.isArray(body.data.suggestedPrompts) || body.data.suggestedPrompts.length === 0) {
+        throw new Error('Home context returned no suggested prompts');
+      }
+      const ids = body.data.recentSessions.map((s: { id: string }) => s.id);
+      if (!ids.includes(tutorSessionAId)) throw new Error('Recent sessions did not include the new session');
+      recordPass('Tutor Sessions', 'Tutor home returns class-aware prompts and recent sessions');
+    } catch (err) {
+      recordFail('Tutor Sessions', 'Tutor home returns class-aware prompts and recent sessions', err);
+    }
+
+    // A bogus bearer token must not be accepted as a credential by the dual-auth
+    // middleware, and must not fall through to the legacy cookie path either.
+    try {
+      const res = await fetch(`${ctx.baseUrl}/me`, {
+        headers: { Authorization: 'Bearer not-a-real-token' }
+      });
+      if (res.status !== 401) throw new Error(`Expected 401 for a bogus bearer token, got ${res.status}`);
+      recordPass('Authentication', 'An invalid bearer token is rejected with 401 Unauthorized');
+    } catch (err) {
+      recordFail('Authentication', 'An invalid bearer token is rejected with 401 Unauthorized', err);
+    }
+
     // Clean up test fixtures safely in reverse dependency order
     try {
       if (quizId) {
@@ -836,7 +1101,14 @@ async function runTests() {
         await prisma.enrollment.deleteMany({ where: { courseId: courseAId } });
         await prisma.course.deleteMany({ where: { id: courseAId } });
       }
-      const testUserIds = [ctx.studentAId, ctx.studentBId, ctx.instructorAId, ctx.instructorBId, ctx.adminId].filter(Boolean);
+      const testUserIds = [
+        ctx.studentAId,
+        ctx.studentBId,
+        ctx.instructorAId,
+        ctx.instructorBId,
+        ctx.adminId,
+        ctx.privEscId
+      ].filter(Boolean);
       if (testUserIds.length > 0) {
         // Also cleanup any orphan courses created by test instructors if any
         await prisma.course.deleteMany({ where: { instructorId: { in: testUserIds } } });

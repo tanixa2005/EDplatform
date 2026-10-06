@@ -1,13 +1,26 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { Figtree } from 'next/font/google';
+import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
-import { AuthProvider } from '@/context/auth-context';
-import { Navbar } from '@/components/shared/navbar';
-import { Footer } from '@/components/shared/footer';
+import { StudentProvider } from '@/context/student-context';
+import { StudentNav } from '@/components/shared/student-nav';
+
+const edSans = Figtree({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-ed-sans'
+});
 
 export const metadata: Metadata = {
-  title: 'EDplatform — Production-Ready AI Education Platform',
+  title: 'ED — Your AI learning companion',
   description:
-    'Experience the next generation of online learning powered by Gemini AI, interactive quizzes, and verified certificates.'
+    'ED is a patient AI tutor for Classes 6 to 8. Ask anything about Maths, Science, Social Science or English and learn it step by step.'
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#FFFDF8'
 };
 
 export default function RootLayout({
@@ -16,14 +29,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary">
-        <AuthProvider>
-          <Navbar />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </AuthProvider>
-      </body>
-    </html>
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: '#E53935',
+          colorBackground: '#FFFDF8',
+          borderRadius: '0.5rem'
+        }
+      }}
+    >
+      <html lang="en" className={edSans.variable} suppressHydrationWarning>
+        <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+          <StudentProvider>
+            <StudentNav />
+            {/* Bottom padding clears the mobile nav bar. */}
+            <main className="pb-24 sm:pb-10">{children}</main>
+          </StudentProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

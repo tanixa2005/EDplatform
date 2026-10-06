@@ -13,6 +13,56 @@ enum Role {
   ADMIN
 }
 
+// ==========================================
+// Student learning profile (Classes 6-8)
+// ==========================================
+
+enum ClassLevel {
+  CLASS_6
+  CLASS_7
+  CLASS_8
+}
+
+enum Board {
+  CBSE
+}
+
+enum SubjectKey {
+  MATH
+  SCIENCE
+  SOCIAL_SCIENCE
+  ENGLISH
+}
+
+/// Language the student prefers explanations in.
+/// Only ENGLISH is surfaced in Phase 1; HINDI / HINGLISH are reserved so the
+/// enum (and therefore the stored column) does not need a migration later.
+enum Language {
+  ENGLISH
+  HINDI
+  HINGLISH
+}
+
+enum ExplanationStyle {
+  SIMPLE
+  STEP_BY_STEP
+  REAL_LIFE
+  EXAM_FOCUSED
+}
+
+enum TutorRole {
+  STUDENT
+  ED
+}
+
+/// How the student supplied a turn. Only TEXT is produced in Phase 1;
+/// IMAGE / AUDIO are reserved for the Picture and Audio tutors.
+enum TutorInputKind {
+  TEXT
+  IMAGE
+  AUDIO
+}
+
 enum CourseStatus {
   DRAFT
   UNDER_REVIEW
@@ -40,7 +90,8 @@ enum ReportStatus {
 model User {
   id               String           @id @default(uuid())
   email            String           @unique
-  passwordHash     String
+  clerkUserId      String?          @unique
+  passwordHash     String?
   firstName        String
   lastName         String
   avatarUrl        String?
@@ -56,11 +107,46 @@ model User {
   lessonProgress   LessonProgress[]
   quizAttempts     QuizAttempt[]
   certificates     Certificate[]
-  aiChatSessions   AIChatSession[]
+  tutorSessions    TutorSession[]
   submittedReports Report[]         @relation("UserReports")
+  studentProfile   StudentProfile?
 
   @@index([email])
   @@index([role])
+  @@index([clerkUserId])
+}
+
+/// Application-specific learning data for a student. Identity lives in Clerk;
+/// everything that shapes how ED teaches this student lives here.
+model StudentProfile {
+  id                        String            @id @default(uuid())
+  userId                    String            @unique
+  user                      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  classLevel                ClassLevel
+  board                     Board             @default(CBSE)
+  preferredLanguage         Language          @default(ENGLISH)
+  preferredExplanationStyle ExplanationStyle  @default(SIMPLE)
+  onboardingCompletedAt     DateTime?
+
+  subjects                  StudentSubject[]
+
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  @@index([classLevel])
+}
+
+model StudentSubject {
+  profileId String
+  subject   SubjectKey
+
+  profile   StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime       @default(now())
+
+  @@id([profileId, subject])
+  @@index([subject])
 }
 
 model Category {
@@ -143,7 +229,7 @@ model Lesson {
 
   resources     Resource[]
   progress      LessonProgress[]
-  aiSessions    AIChatSession[]
+  tutorSessions TutorSession[]
   quizzes       Quiz[]
 
   createdAt     DateTime         @default(now())
@@ -345,33 +431,47 @@ model Certificate {
   @@index([userId])
 }
 
-model AIChatSession {
-  id        String      @id @default(uuid())
-  userId    String
-  lessonId  String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  messages  AIMessage[]
+/// A persistent ED tutoring conversation. `lessonId` is optional so a student can
+/// start a session straight from the home screen without browsing to a lesson first.
+/// `classLevel` is snapshotted per session because a student may move up a class.
+model TutorSession {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  lessonId     String?
+  lesson       Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
-  @@unique([userId, lessonId])
-  @@index([userId])
+  classLevel   ClassLevel
+  subject      SubjectKey?
+  title        String
+  lastActiveAt DateTime       @default(now())
+  closedAt     DateTime?
+
+  messages     TutorMessage[]
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([userId, lastActiveAt])
   @@index([lessonId])
 }
 
-model AIMessage {
-  id        String        @id @default(uuid())
-  role      String        // "user" | "model"
-  content   String        @db.Text
+model TutorMessage {
+  id         String         @id @default(uuid())
+  role       TutorRole
+  inputKind  TutorInputKind @default(TEXT)
+  content    String         @db.Text
+  /// Quick action that produced this turn ("hint" | "simpler" | "real_example" |
+  /// "quiz_me" | "still_confused"), or null for a free-form question.
+  mode       String?
 
-  sessionId String
-  session   AIChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  session    TutorSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime      @default(now())
+  createdAt  DateTime       @default(now())
 
-  @@index([sessionId])
+  @@index([sessionId, createdAt])
 }
 
 model Report {

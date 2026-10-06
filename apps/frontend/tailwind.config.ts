@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import typography from '@tailwindcss/typography';
 import path from 'path';
 
 const config: Config = {
@@ -82,6 +83,18 @@ const config: Config = {
           DEFAULT: '#111111',
           light: '#2A2A2A',
           muted: '#666666'
+        },
+        // Semantic feedback colours for tutoring.
+        // Red is reserved for genuine errors; "not yet" is amber on purpose.
+        notyet: {
+          DEFAULT: '#E8A33D',
+          soft: '#FDF3E2',
+          ink: '#7A5300'
+        },
+        gotit: {
+          DEFAULT: '#2E7D52',
+          soft: '#E8F4EC',
+          ink: '#1C5436'
         }
       },
       borderRadius: {
@@ -92,6 +105,7 @@ const config: Config = {
       },
       fontFamily: {
         display: [
+          'var(--font-ed-sans)',
           '-apple-system',
           'BlinkMacSystemFont',
           '"Segoe UI"',
@@ -101,6 +115,7 @@ const config: Config = {
           'sans-serif'
         ],
         sans: [
+          'var(--font-ed-sans)',
           '-apple-system',
           'BlinkMacSystemFont',
           '"Segoe UI"',
@@ -112,7 +127,7 @@ const config: Config = {
       }
     }
   },
-  plugins: []
+  plugins: [typography]
 };
 
 export default config;

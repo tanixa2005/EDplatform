@@ -1,3 +1,5 @@
+@import 'katex/dist/katex.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -80,7 +82,9 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* 16px floor: the old 10-11px micro-labels are unreadable for this age group. */
+    font-size: 16px;
+    line-height: 1.6;
   }
 }
 
@@ -131,5 +135,54 @@
   /* Sharp geometric badge */
   .tag-pill {
     @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded border;
+  }
+}
+
+@layer components {
+  /* ED's answer bubble. Tuned for reading on a phone: generous line height,
+     clear step numbering, and maths that does not overflow the bubble. */
+  .ed-prose {
+    @apply prose prose-sm sm:prose-base max-w-none text-foreground;
+    @apply prose-headings:font-bold prose-headings:text-foreground prose-headings:mt-4 prose-headings:mb-2;
+    @apply prose-p:my-2.5 prose-p:leading-relaxed;
+    @apply prose-strong:text-foreground prose-strong:font-bold;
+    @apply prose-ol:my-2.5 prose-ul:my-2.5 prose-li:my-1 prose-li:leading-relaxed;
+    @apply prose-code:text-[0.95em] prose-code:font-medium prose-code:before:content-none prose-code:after:content-none;
+    @apply prose-pre:bg-ink prose-pre:text-ivory-100 prose-pre:rounded-lg prose-pre:text-[13px];
+    @apply prose-a:text-primary prose-a:underline-offset-2;
+    @apply prose-blockquote:border-l-primary/40 prose-blockquote:not-italic prose-blockquote:text-foreground/80;
+    @apply prose-table:text-sm;
+  }
+
+  .ed-prose :where(code):not(:where(pre code)) {
+    @apply bg-secondary px-1.5 py-0.5 rounded border border-border;
+  }
+
+  /* Long display equations scroll rather than breaking the layout on a phone. */
+  .ed-prose .katex-display {
+    @apply overflow-x-auto overflow-y-hidden py-1;
+  }
+
+  /* Primary action: large, unmissable tap target. */
+  .ed-tap {
+    @apply min-h-[48px] inline-flex items-center justify-center;
+  }
+
+  /* Quick-action chip under the tutor conversation. */
+  .ed-chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border
+           bg-card px-3.5 py-2 text-sm font-semibold text-foreground/80
+           transition-colors hover:border-primary/40 hover:text-foreground
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

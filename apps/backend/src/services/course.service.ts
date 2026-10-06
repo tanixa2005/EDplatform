@@ -212,6 +212,7 @@ export class CourseService {
     const safeInstructor: SafeUser = {
       id: course.instructor.id,
       email: course.instructor.email,
+      clerkUserId: course.instructor.clerkUserId,
       firstName: course.instructor.firstName,
       lastName: course.instructor.lastName,
       avatarUrl: course.instructor.avatarUrl,

@@ -10,8 +10,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
   firstName: z.string().trim().min(1, 'First name is required').max(50),
-  lastName: z.string().trim().min(1, 'Last name is required').max(50),
-  role: z.enum(['STUDENT', 'INSTRUCTOR']).default('STUDENT')
+  lastName: z.string().trim().min(1, 'Last name is required').max(50)
 });
 
 export const loginSchema = z.object({
