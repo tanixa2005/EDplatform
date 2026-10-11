@@ -24,6 +24,7 @@
     "db:diff": "node scripts/db-guard.mjs migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
     "test:voice": "tsx src/__tests__/verify_ed_voice.ts",
     "test:production-seed": "tsx src/__tests__/verify_production_seed.ts",
+    "test:cors": "tsx src/__tests__/verify_cors.ts",
     "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
     "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
     "predb:seed:lessons": "node scripts/db-guard.mjs --print",

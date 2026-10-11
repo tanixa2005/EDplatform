@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { parseAllowedOrigins } from './cors-origins.js';
 
 // Load .env file
 dotenv.config();
@@ -8,7 +9,21 @@ export const envSchema = z
   .object({
     PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    CORS_ORIGIN: z.string().default('http://localhost:3000'),
+    // Validated at startup: an unsafe or empty entry stops the server with a
+    // message that names the problem, rather than failing every browser request.
+    CORS_ORIGIN: z
+      .string()
+      .default('http://localhost:3000')
+      .superRefine((value, ctx) => {
+        try {
+          parseAllowedOrigins(value);
+        } catch (err) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: err instanceof Error ? err.message : 'CORS_ORIGIN is invalid'
+          });
+        }
+      }),
     DATABASE_URL: z.string().default('postgresql://postgres:postgres@localhost:5432/edplatform?schema=public'),
     JWT_SECRET: z.string().default('edplatform-development-secret-key-at-least-32-chars-long'),
     JWT_EXPIRES_IN: z.string().default('7d'),

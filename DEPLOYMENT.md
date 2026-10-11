@@ -20,6 +20,27 @@ Configure these variables in your frontend hosting environment (e.g., Vercel Pro
 | `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | No | `/onboarding` | New students go straight to onboarding. |
 
 > [!IMPORTANT]
+> **Clerk must be configured before the frontend can build.** `ClerkProvider` wraps every page, so `next build` fails with `throwMissingPublishableKeyError` when `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is absent. Set both `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` for **every Vercel environment that builds the app: Production and Preview**. The publishable key is compiled into the bundle at build time, so changing it requires a new build. Use keys from the same Clerk instance, and make sure the preview domain is allowed in that instance's settings. The key values come from the Clerk dashboard and are never written into this document or the repository.
+
+### Clerk keys by environment
+
+Clerk keys come in two kinds: **test** (development instance, `pk_test_` / `sk_test_`) and **live** (production instance, `pk_live_` / `sk_live_`). Which kind to use depends on where the code runs.
+
+| Where | Variable | Kind | Why |
+| :--- | :--- | :--- | :--- |
+| Vercel **Production** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | live | The production site must use the production Clerk instance. |
+| Vercel **Production** | `CLERK_SECRET_KEY` | live, same instance | Used by the frontend server. Must match the publishable key. |
+| Vercel **Preview** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | live, same instance | Preview calls the same Render backend as production (see below). |
+| Vercel **Preview** | `CLERK_SECRET_KEY` | live, same instance | Same reason as Production. |
+| Render (backend) | `CLERK_SECRET_KEY` | live, same instance | The backend verifies every token with this key. |
+| Render (backend) | `CLERK_WEBHOOK_SECRET` | from that instance's webhook | Verifies user webhooks. |
+
+**Why Preview uses the production instance:** one Render backend serves both the Production and Preview frontends, and it verifies every token with its own `CLERK_SECRET_KEY`. A token from a different Clerk instance is rejected, so Preview must use the same instance as Render. Because that instance is live, add each preview domain to its allowed domains in the Clerk dashboard.
+
+**The "development keys" warning** appears when the publishable key is a test key (`pk_test_`). Test keys belong only to local development, where the local backend also uses a test secret key. If the production site shows the warning, the Vercel **Production** publishable key is a test key: replace it with the live key and redeploy. The key is compiled into the build, so a change only takes effect after a new build.
+
+If you want Preview on a separate test instance, that needs its own backend with test keys. It is not set up in this repository.
+
 > **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
 
 ---
@@ -202,14 +223,23 @@ The backend is built with **Node.js, Express, TypeScript, and Prisma**. It is fu
 
 ## 8. CORS Configuration Requirements
 
-Cross-Origin Resource Sharing is enforced via `helmet` and `cors` middlewares in `apps/backend/src/app.ts`:
+The browser frontend may call the API only from the origins listed in `CORS_ORIGIN` on the backend host (Render).
 
-- `CORS_ORIGIN` must match your frontend URL exactly.
-- **Multiple Origins Support:** You can specify comma-separated origins:
-  ```env
-  CORS_ORIGIN=https://edplatform.com,https://preview.edplatform.vercel.app
-  ```
-- `credentials: true` is enabled to allow HttpOnly authentication cookies to be sent and received in cross-origin requests.
+- **Format:** a comma-separated list of exact origins. Each entry is the scheme and host (and port, if any), with no path.
+- **Tidying:** spaces and trailing slashes are removed automatically, and letter case is normalised.
+- **Refused:** a wildcard `*`, any entry with a path or query, and any non-web scheme. An invalid value stops the backend at startup with a message that names the problem, so a bad value is caught on deploy rather than as a failing browser request.
+- **Per request:** each request is checked against the list on its own. The origin that matched is echoed back, so every listed frontend works. An origin that is not listed gets no allow-origin header, and the browser blocks the response.
+- **No pattern matching:** the backend does **not** trust `*.vercel.app`. Every Vercel preview URL that should reach the API must be added to `CORS_ORIGIN` explicitly.
+- **Preview URLs change:** a preview deployment's URL changes when the deployment is recreated. When a new preview URL must reach the API, add it to `CORS_ORIGIN`. Render reads the variable at startup, so the running service keeps the old value until it restarts (see the checklist below).
+- **Local development:** if `CORS_ORIGIN` is not set, the default is `http://localhost:3000`.
+
+**Current value for this setup** (production and the current preview URL):
+
+```env
+CORS_ORIGIN=https://e-dplatform.vercel.app,https://e-dplatform-fh81hvko1-tanixa.vercel.app
+```
+
+To confirm it works in a browser: open the profile page, open DevTools, and inspect the `/me` request. Its `access-control-allow-origin` response header must equal the page's own origin.
 
 ---
 

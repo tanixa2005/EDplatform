@@ -23,8 +23,9 @@ export default hasClerkKeys
         await auth.protect();
       }
     })
-  : // Without Clerk keys configured the app still builds and serves; protected
-    // pages then render their signed-out state rather than crashing at the edge.
+  : // Not a supported configuration. ClerkProvider wraps every page, so the build
+    // fails first without NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY. This branch is a
+    // safety net only, and it does not make Clerk optional.
     () => NextResponse.next();
 
 export const config = {
