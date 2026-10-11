@@ -1,11 +1,13 @@
 import {
   UpdateProgressInput,
   LessonProgressDto,
+  SafeUser,
   calculateMeaningfulPlaybackCoverage,
   WatchedInterval
 } from '@edplatform/shared';
 import { prisma } from '../config/prisma.config.js';
 import { NotFoundError } from '../errors/app.error.js';
+import { resolveCurriculumLessonAccess } from './curriculum-access.service.js';
 import { Prisma } from '@prisma/client';
 
 export class ProgressService {
@@ -13,12 +15,17 @@ export class ProgressService {
    * Saves or updates lesson progress using non-overlapping watched interval calculation.
    * Prevents cheating by seeking straight to 90%+.
    */
-  async updateProgress(input: UpdateProgressInput, userId: string): Promise<LessonProgressDto> {
+  async updateProgress(input: UpdateProgressInput, user: SafeUser): Promise<LessonProgressDto> {
+    const userId = user.id;
+
     const lesson = await prisma.lesson.findUnique({
       where: { id: input.lessonId },
       include: {
         module: {
-          select: { courseId: true }
+          select: {
+            courseId: true,
+            course: { select: { slug: true, isPublished: true } }
+          }
         }
       }
     });
@@ -26,6 +33,21 @@ export class ProgressService {
     if (!lesson) {
       throw new NotFoundError('Lesson not found');
     }
+
+    // A progress write is the one place a student can touch a lesson row they
+    // were never allowed to open. Authentication alone used to be enough here,
+    // so a Class 6 student could record completion against a Class 8 topic (or
+    // a legacy technical lesson) just by posting its id. Reuse the same gate
+    // the read path uses; legacy courses fall through unchanged so existing
+    // enrollment-based progress keeps working.
+    await resolveCurriculumLessonAccess(
+      {
+        courseSlug: lesson.module.course.slug,
+        courseIsPublished: lesson.module.course.isPublished,
+        lessonIsPublished: lesson.isPublished
+      },
+      user
+    );
 
     // 1. Retrieve existing progress record
     const existing = await prisma.lessonProgress.findUnique({

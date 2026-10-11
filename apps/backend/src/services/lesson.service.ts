@@ -4,6 +4,7 @@ import { NotFoundError, ForbiddenError } from '../errors/app.error.js';
 import { courseService } from './course.service.js';
 import { slugify } from '../utils/slug.util.js';
 import { videoService } from './video/video.service.js';
+import { resolveCurriculumLessonAccess } from './curriculum-access.service.js';
 
 export class LessonService {
   /**
@@ -129,8 +130,28 @@ export class LessonService {
     const isAdmin = currentUser?.role === 'ADMIN';
 
     if (!isOwner && !isAdmin) {
-      // 2. Free preview allows public/student view
-      if (!lesson.isFreePreview) {
+      // 2. Curriculum lessons are gated by the student's own class, not by
+      //    enrollment. Class 6-8 material is the student's syllabus, so
+      //    requiring them to "enroll" in Class 6 Science is both wrong for the
+      //    product and useless as a protection - every student would enroll.
+      //
+      //    This has to come BEFORE the free-preview branch below. The four
+      //    seeded Chapter 1 topics carry isFreePreview = true, which is what
+      //    lets the Learn path open them at all; left to the old rule that flag
+      //    alone would hand any curriculum lesson to anybody, including an
+      //    anonymous caller and a Class 6 student guessing Class 8 lesson ids.
+      const curriculum = await resolveCurriculumLessonAccess(
+        {
+          courseSlug: course.slug,
+          courseIsPublished: course.isPublished,
+          lessonIsPublished: lesson.isPublished
+        },
+        currentUser
+      );
+
+      // 3. Legacy marketplace courses keep their original rule exactly: free
+      //    preview is public, everything else needs an enrollment.
+      if (curriculum === 'not-curriculum' && !lesson.isFreePreview) {
         if (!currentUser) {
           throw new ForbiddenError('You must sign in and enroll in this course to view this lesson');
         }

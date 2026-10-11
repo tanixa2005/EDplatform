@@ -31,13 +31,15 @@ export class AuthService {
         passwordHash,
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
-        role: input.role
+        // EDplatform is student-only. There is no role to choose at sign-up.
+        role: 'STUDENT'
       }
     });
 
     const safeUser: SafeUser = {
       id: user.id,
       email: user.email,
+      clerkUserId: user.clerkUserId,
       firstName: user.firstName,
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
@@ -78,6 +80,14 @@ export class AuthService {
       throw new UnauthorizedError('Your account has been deactivated. Please contact support.');
     }
 
+    // A Clerk-provisioned account has no local password hash, so legacy
+    // email/password login must not be usable against it.
+    if (!user.passwordHash) {
+      throw new UnauthorizedError(
+        'This account now uses the new EDplatform sign-in. Please use the Sign in button.'
+      );
+    }
+
     // 2. Verify password with Argon2id
     const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
 
@@ -88,6 +98,7 @@ export class AuthService {
     const safeUser: SafeUser = {
       id: user.id,
       email: user.email,
+      clerkUserId: user.clerkUserId,
       firstName: user.firstName,
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
@@ -123,6 +134,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
+      clerkUserId: user.clerkUserId,
       firstName: user.firstName,
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,

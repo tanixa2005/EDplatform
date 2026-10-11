@@ -14,7 +14,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const variants = {
       // Primary button is solid near-black: crisp, confident, purposeful
       default:
-        'bg-[#111111] text-white hover:bg-[#262626] shadow-xs',
+        'bg-solid text-solid-foreground hover:bg-solid-hover shadow-xs',
       // Emphasized red call-to-action
       red:
         'bg-primary text-primary-foreground hover:bg-brand-600 shadow-xs',

@@ -19,7 +19,7 @@ export const courseRouter = Router();
 // ==========================================
 // Public Course Discovery
 // ==========================================
-courseRouter.get('/', courseController.getPublishedCourses);
+courseRouter.get('/', optionalAuthenticate, courseController.getPublishedCourses);
 
 // ==========================================
 // Instructor Course Management

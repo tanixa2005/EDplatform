@@ -12,9 +12,36 @@ Configure these variables in your frontend hosting environment (e.g., Vercel Pro
 | :--- | :---: | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | **Yes** | `https://api.yourdomain.com/api/v1` | Base URL for all backend API endpoints. |
 | `NEXT_PUBLIC_APP_URL` | No | `https://yourdomain.com` | Canonical frontend domain for metadata and links. |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | **Yes** | `pk_live_...` | Clerk publishable key. Safe to expose; it identifies the Clerk instance. |
+| `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Clerk secret key, used by `clerkMiddleware()` in the Next.js server runtime. Never exposed to the browser. |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | No | `/sign-in` | Sign-in route. |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | No | `/sign-up` | Sign-up route. |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | No | `/` | Where a returning student lands after sign-in. |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | No | `/onboarding` | New students go straight to onboarding. |
 
 > [!IMPORTANT]
-> **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
+> **Clerk must be configured before the frontend can build.** `ClerkProvider` wraps every page, so `next build` fails with `throwMissingPublishableKeyError` when `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is absent. Set both `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` for **every Vercel environment that builds the app: Production and Preview**. The publishable key is compiled into the bundle at build time, so changing it requires a new build. Use keys from the same Clerk instance, and make sure the preview domain is allowed in that instance's settings. The key values come from the Clerk dashboard and are never written into this document or the repository.
+
+### Clerk keys by environment
+
+Clerk keys come in two kinds: **test** (development instance, `pk_test_` / `sk_test_`) and **live** (production instance, `pk_live_` / `sk_live_`). Which kind to use depends on where the code runs.
+
+| Where | Variable | Kind | Why |
+| :--- | :--- | :--- | :--- |
+| Vercel **Production** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | live | The production site must use the production Clerk instance. |
+| Vercel **Production** | `CLERK_SECRET_KEY` | live, same instance | Used by the frontend server. Must match the publishable key. |
+| Vercel **Preview** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | live, same instance | Preview calls the same Render backend as production (see below). |
+| Vercel **Preview** | `CLERK_SECRET_KEY` | live, same instance | Same reason as Production. |
+| Render (backend) | `CLERK_SECRET_KEY` | live, same instance | The backend verifies every token with this key. |
+| Render (backend) | `CLERK_WEBHOOK_SECRET` | from that instance's webhook | Verifies user webhooks. |
+
+**Why Preview uses the production instance:** one Render backend serves both the Production and Preview frontends, and it verifies every token with its own `CLERK_SECRET_KEY`. A token from a different Clerk instance is rejected, so Preview must use the same instance as Render. Because that instance is live, add each preview domain to its allowed domains in the Clerk dashboard.
+
+**The "development keys" warning** appears when the publishable key is a test key (`pk_test_`). Test keys belong only to local development, where the local backend also uses a test secret key. If the production site shows the warning, the Vercel **Production** publishable key is a test key: replace it with the live key and redeploy. The key is compiled into the build, so a change only takes effect after a new build.
+
+If you want Preview on a separate test instance, that needs its own backend with test keys. It is not set up in this repository.
+
+> **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
 
 ---
 
@@ -33,7 +60,54 @@ Configure these variables in your backend hosting environment (e.g., Render, Rai
 | `COOKIE_SECURE` | No | `true` | Enforces `Secure` flag on `auth_token` cookie (defaults to `true` when `NODE_ENV=production`). |
 | `COOKIE_SAME_SITE` | **Yes** | `lax` or `none` | Set to `lax` for same-domain setups, or `none` if frontend and backend have different domains. |
 | `COOKIE_DOMAIN` | No | `.yourdomain.com` | Optional shared root domain for subdomains. Leave unset for host-only cookies. |
-| `GEMINI_API_KEY` | No | `AIzaSy...` | Google Gemini API key. If omitted, AI Tutor falls back safely to Mock provider. |
+| `OPENROUTER_API_KEY` | **Yes** (for live AI) | none | Your OpenRouter API key. Set it in the host's secret store. Without it the app serves the offline Mock instead of AI tutoring. See [AI tutor provider](#ai-tutor-provider-openrouter). |
+| `OPENROUTER_MODEL` | No | `apodex/apodex-1.1-mini:free` | Text model for ordinary tutoring. |
+| `OPENROUTER_VISION_MODEL` | No | `openrouter/free` | Route used only for questions that include a photo. Empty turns photo questions off. |
+| `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Verifies Clerk session tokens locally against the cached JWKS. While unset, the backend falls back to the legacy JWT cookie. |
+| `CLERK_PUBLISHABLE_KEY` | No | `pk_live_...` | Clerk instance identifier. |
+| `CLERK_WEBHOOK_SECRET` | **Yes** | `whsec_...` | Svix signing secret for the `user.created` / `user.updated` / `user.deleted` webhook. Without it the webhook endpoint refuses every request. |
+
+### AI tutor provider (OpenRouter)
+
+The AI tutor uses two OpenRouter routes. **Both must be configured and checked on the deployment host.** They are separate settings, so changing one does not change the other.
+
+- **Text route** (`OPENROUTER_MODEL`) is used for every ordinary tutoring turn. The default is `apodex/apodex-1.1-mini:free`.
+- **Photo route** (`OPENROUTER_VISION_MODEL`) is used only when a question includes a photo. The default is `openrouter/free`, OpenRouter's free router. A value in the host's environment replaces the default. The code accepts only `openrouter/free` or a model id ending in `:free`; any other id is refused and students see a clear photo message instead. Set it to an empty value to turn photo questions off.
+
+Keep keys and private URLs out of the repository and this document. Set `OPENROUTER_API_KEY` in the host's secret store only.
+
+**Missing configuration is not a working AI provider.** Without `OPENROUTER_API_KEY` the app still starts, and it serves the offline Mock. The Mock gives canned replies, not tutoring. Treat that as a failed deployment, not a successful one.
+
+**Check both routes after every deploy:**
+
+1. Open the backend's startup log on the host. It should contain one line in this form:
+   `AI provider: OpenRouter (<text model>), photos: <photo route>`
+   If it reads `AI provider: Mock (OPENROUTER_API_KEY not set)`, the key is missing.
+2. Confirm the two model ids in that line are the intended ones, and confirm on your OpenRouter account that the photo route is free.
+3. On the deployed app, send one text question and one photo question. Each should get a real answer.
+
+> [!IMPORTANT]
+> **Cookies are no longer used for API authentication.** The frontend sends the
+> Clerk session token as `Authorization: Bearer <token>`, so the Clerk session
+> cookie stays first-party on the frontend origin. `COOKIE_SECURE`,
+> `COOKIE_SAME_SITE` and `COOKIE_DOMAIN` now only affect the legacy
+> email/password login, which remains available until the Clerk flow is verified
+> in production.
+
+### Clerk webhook setup
+
+In the Clerk dashboard, add an endpoint pointing at:
+
+```
+https://<your-backend-host>/api/v1/webhooks/clerk
+```
+
+Subscribe to `user.created`, `user.updated` and `user.deleted`, then copy the
+signing secret into `CLERK_WEBHOOK_SECRET`. The route is mounted before
+`express.json()` because Svix verifies the signature against the raw request body.
+
+If the webhook is slow or misconfigured, the backend still creates the student
+record lazily on the first authenticated request, so sign-up is never blocked.
 
 ---
 
@@ -127,7 +201,7 @@ When deploying `apps/frontend` to **Vercel**:
    - `NEXT_PUBLIC_APP_URL`: Set to your live frontend URL (e.g. `https://edplatform.com`).
 
 4. **Zero Backend Secrets on Vercel**:
-   - Vercel **does not** require `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any backend secrets.
+   - Vercel **does not** require `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, or any backend secrets.
    - Prisma Client generation is decoupled and executed strictly in backend deployment pipelines (e.g., Render/Railway/Fly.io).
 
 ---
@@ -149,14 +223,23 @@ The backend is built with **Node.js, Express, TypeScript, and Prisma**. It is fu
 
 ## 8. CORS Configuration Requirements
 
-Cross-Origin Resource Sharing is enforced via `helmet` and `cors` middlewares in `apps/backend/src/app.ts`:
+The browser frontend may call the API only from the origins listed in `CORS_ORIGIN` on the backend host (Render).
 
-- `CORS_ORIGIN` must match your frontend URL exactly.
-- **Multiple Origins Support:** You can specify comma-separated origins:
-  ```env
-  CORS_ORIGIN=https://edplatform.com,https://preview.edplatform.vercel.app
-  ```
-- `credentials: true` is enabled to allow HttpOnly authentication cookies to be sent and received in cross-origin requests.
+- **Format:** a comma-separated list of exact origins. Each entry is the scheme and host (and port, if any), with no path.
+- **Tidying:** spaces and trailing slashes are removed automatically, and letter case is normalised.
+- **Refused:** a wildcard `*`, any entry with a path or query, and any non-web scheme. An invalid value stops the backend at startup with a message that names the problem, so a bad value is caught on deploy rather than as a failing browser request.
+- **Per request:** each request is checked against the list on its own. The origin that matched is echoed back, so every listed frontend works. An origin that is not listed gets no allow-origin header, and the browser blocks the response.
+- **No pattern matching:** the backend does **not** trust `*.vercel.app`. Every Vercel preview URL that should reach the API must be added to `CORS_ORIGIN` explicitly.
+- **Preview URLs change:** a preview deployment's URL changes when the deployment is recreated. When a new preview URL must reach the API, add it to `CORS_ORIGIN`. Render reads the variable at startup, so the running service keeps the old value until it restarts (see the checklist below).
+- **Local development:** if `CORS_ORIGIN` is not set, the default is `http://localhost:3000`.
+
+**Current value for this setup** (production and the current preview URL):
+
+```env
+CORS_ORIGIN=https://e-dplatform.vercel.app,https://e-dplatform-fh81hvko1-tanixa.vercel.app
+```
+
+To confirm it works in a browser: open the profile page, open DevTools, and inspect the `/me` request. Its `access-control-allow-origin` response header must equal the page's own origin.
 
 ---
 

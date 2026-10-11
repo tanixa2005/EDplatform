@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { courseService } from '../services/course.service.js';
+import { studentProfileService } from '../services/student-profile.service.js';
 import { UnauthorizedError } from '../errors/app.error.js';
 
 export class CourseController {
@@ -16,10 +17,16 @@ export class CourseController {
   async getPublishedCourses(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { search, level, categoryId } = req.query;
+
+      // The class level comes from the student's stored profile, never from the
+      // request, so it cannot be spoofed to reveal content for another class.
+      const profile = req.user ? await studentProfileService.getProfile(req.user.id) : null;
+
       const courses = await courseService.getPublishedCourses({
         search: typeof search === 'string' ? search : undefined,
         level: typeof level === 'string' ? level : undefined,
-        categoryId: typeof categoryId === 'string' ? categoryId : undefined
+        categoryId: typeof categoryId === 'string' ? categoryId : undefined,
+        classLevel: profile?.classLevel ?? null
       });
       res.status(200).json({ success: true, data: { courses } });
     } catch (error) {
@@ -29,7 +36,14 @@ export class CourseController {
 
   async getCourseByIdOrSlug(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const course = await courseService.getCourseByIdOrSlug(req.params.idOrSlug as string, req.user);
+      // Class level comes from the stored profile, never from the request.
+      const detailProfile = req.user ? await studentProfileService.getProfile(req.user.id) : null;
+
+      const course = await courseService.getCourseByIdOrSlug(
+        req.params.idOrSlug as string,
+        req.user,
+        detailProfile?.classLevel ?? null
+      );
       res.status(200).json({ success: true, data: { course } });
     } catch (error) {
       next(error);

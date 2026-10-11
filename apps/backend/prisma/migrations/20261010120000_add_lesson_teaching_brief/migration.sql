@@ -1,0 +1,30 @@
+-- C13.5.2: a short, reviewed teaching reference ED can be trusted with.
+--
+-- The C13.5 audit measured that only ~5.5% of the authored teaching text for
+-- the one written chapter reaches the model: the prompt carries the topic
+-- title and a one-sentence objective, and `Lesson.content` is selected
+-- nowhere in the tutor path. ED therefore re-explains a topic from its own
+-- knowledge while the student is looking at a page it has never seen.
+--
+-- This column is where the fix lands. It is deliberately NOT the page body:
+-- `content` is prose written to be read by a child, and resending the whole
+-- article on every turn would spend tokens on a shape the model does not
+-- need. The brief is the teaching skeleton - key idea, the worked example the
+-- page actually uses, the vocabulary it introduces, the usual misconception.
+--
+-- Nullable, no default, NO BACKFILL. Every existing row stays NULL, and NULL
+-- means "no brief", which renders the prompt exactly as it rendered before
+-- this column existed. This migration therefore changes no behaviour at all
+-- on its own; it only makes the behaviour expressible.
+--
+-- Additive only: one ADD COLUMN. No existing column is altered, no row is
+-- rewritten, no index or constraint is touched, and no table is rebuilt.
+-- Rolling back is a single DROP COLUMN, because every read site treats a
+-- missing brief the same as a null one.
+--
+-- No review metadata is added in this phase. That is a deliberate scope
+-- decision, and it makes the operational rule load-bearing: only original,
+-- human-reviewed briefs may be written here, because the prompt labels
+-- whatever is stored as reviewed.
+
+ALTER TABLE "Lesson" ADD COLUMN "teachingBrief" TEXT;

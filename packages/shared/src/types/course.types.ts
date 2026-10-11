@@ -23,6 +23,12 @@ export interface LessonSummaryDto {
   isFreePreview: boolean;
   isPublished: boolean;
   moduleId: string;
+  /**
+   * The published quiz attached to this lesson, if any. Lets a chapter list
+   * link straight to practice questions without a second round trip per
+   * lesson. Only the id - never the questions, and never the answer key.
+   */
+  quizId?: string | null;
 }
 
 export interface ModuleSummaryDto {

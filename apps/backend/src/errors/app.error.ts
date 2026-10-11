@@ -56,6 +56,18 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * An upstream the product depends on is down or rate limited.
+ *
+ * The message is student-facing, so callers must pass a sentence that is safe
+ * to show a child: never a provider name, model id, HTTP status or quota text.
+ */
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'That is not available right now. Try again in a moment.', code = 'SERVICE_UNAVAILABLE') {
+    super(message, 503, code);
+  }
+}
+
 export class TooManyRequestsError extends AppError {
   constructor(message = 'Too many requests. Please slow down and try again later.', code = 'RATE_LIMIT_EXCEEDED', details?: unknown) {
     super(message, 429, code, details);

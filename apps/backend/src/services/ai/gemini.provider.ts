@@ -3,19 +3,23 @@ import { IAITutorProvider, StreamParams, StructuredParams } from './ai-provider.
 
 export class GeminiAITutorProvider implements IAITutorProvider {
   public readonly name = 'GeminiAITutorProvider';
+  /** Gemini accepted inline image data. Unreachable since the migration. */
+  public readonly supportsImages = true;
   private client: GoogleGenAI;
   private model: string;
 
-  constructor(apiKey: string, model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, model = 'gemini-3.6-flash') {
     this.client = new GoogleGenAI({ apiKey });
     this.model = model;
   }
 
   public async generateStream(params: StreamParams): Promise<string> {
-    const { systemPrompt, userPrompt, history = [], onChunk } = params;
+    const { systemPrompt, userPrompt, history = [], images = [], onChunk } = params;
 
-    // Convert history into contents array formatted for @google/genai
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    // A part is either text or inline binary. History is always text: images
+    // are never persisted, so there is nothing to replay from earlier turns.
+    type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+    const contents: Array<{ role: string; parts: GeminiPart[] }> = [];
 
     for (const msg of history) {
       contents.push({
@@ -24,11 +28,18 @@ export class GeminiAITutorProvider implements IAITutorProvider {
       });
     }
 
-    // Add current user prompt
-    contents.push({
-      role: 'user',
-      parts: [{ text: userPrompt }],
-    });
+    // Current turn: the image (if any) comes first so the model has the
+    // evidence in hand before it reads the question about it. Base64 is
+    // produced here and nowhere else, and is never logged.
+    const currentParts: GeminiPart[] = [];
+    for (const image of images) {
+      currentParts.push({
+        inlineData: { mimeType: image.mimeType, data: image.data.toString('base64') },
+      });
+    }
+    currentParts.push({ text: userPrompt });
+
+    contents.push({ role: 'user', parts: currentParts });
 
     let fullText = '';
 
