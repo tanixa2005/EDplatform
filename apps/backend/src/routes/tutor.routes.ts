@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tutorController } from '../controllers/tutor.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { aiRateLimiter } from '../middlewares/rate-limit.middleware.js';
+import { uploadTutorImage } from '../middlewares/upload.middleware.js';
 
 export const tutorRouter = Router();
 
@@ -28,6 +29,15 @@ tutorRouter.delete('/sessions/:sessionId', authenticate, (req, res, next) => {
 });
 
 // One tutoring turn, streamed over SSE. Rate-limited to protect AI spend.
-tutorRouter.post('/sessions/:sessionId/stream', authenticate, aiRateLimiter, (req, res, next) => {
-  tutorController.streamTurn(req, res, next);
-});
+// uploadTutorImage sits AFTER the rate limiter so a flood of photo uploads is
+// throttled before any multipart parsing happens, and passes a plain JSON turn
+// through untouched.
+tutorRouter.post(
+  '/sessions/:sessionId/stream',
+  authenticate,
+  aiRateLimiter,
+  uploadTutorImage,
+  (req, res, next) => {
+    tutorController.streamTurn(req, res, next);
+  }
+);

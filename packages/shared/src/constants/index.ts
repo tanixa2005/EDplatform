@@ -1,5 +1,7 @@
 export * from './progress.constants.js';
 export * from './class-profiles.js';
+export * from './curriculum.js';
+export * from './ed-voice.js';
 
 export const USER_ROLES = {
   STUDENT: 'STUDENT',

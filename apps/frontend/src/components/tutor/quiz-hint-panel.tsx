@@ -3,12 +3,16 @@
 import React, { useRef, useState } from 'react';
 import { AlertCircle, HelpCircle, Loader2, Square, X } from 'lucide-react';
 import { MarkdownMessage } from '@/components/ai/markdown-message';
+import { SpeakButton } from '@/components/tutor/speak-button';
 import { streamSse } from '@/lib/sse-stream';
 
 interface QuizHintPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  lessonId: string;
+  /**
+   * The only thing the server needs. It resolves the quiz, lesson, course,
+   * class and subject from this id, after checking the student may see it.
+   */
   questionId?: string;
 }
 
@@ -24,17 +28,19 @@ const PROMPTS = [
 ];
 
 /**
- * In-quiz hints, kept deliberately separate from the main tutor.
+ * In-quiz hints.
  *
- * This calls the existing `/ai/tutor/stream` endpoint in `quiz` mode, whose system
- * prompt carries six explicit anti-answer rules and which never loads the
- * `isCorrect` flag of any option into the prompt. Quiz integrity is enforced on
- * the server, not by this UI.
+ * Calls `/ai/quiz/hint`, which authorises the question through the same gate as
+ * every other quiz endpoint and builds the prompt from the current ED stack -
+ * safety rules, voice guide, class profile, curriculum context, and a quiz
+ * integrity rule that applies only while a question is open. The answer key is
+ * never loaded on the server, so integrity does not depend on this UI.
  *
- * The one thing that changed in Phase 1: replies render as Markdown and LaTeX
- * instead of raw text, so a hint about a fraction is actually readable.
+ * This used to post a lessonId, a mode and its own conversation history. All
+ * three are gone: the lesson was being used to authorise a question it had no
+ * relationship to, and history a client writes is history a client can forge.
  */
-export function QuizHintPanel({ isOpen, onClose, lessonId, questionId }: QuizHintPanelProps) {
+export function QuizHintPanel({ isOpen, onClose, questionId }: QuizHintPanelProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +49,7 @@ export function QuizHintPanel({ isOpen, onClose, lessonId, questionId }: QuizHin
   const isStreaming = streaming !== null;
 
   async function ask(message: string) {
-    if (isStreaming) return;
-
-    const history = turns.map((turn) => ({
-      role: turn.role === 'student' ? ('user' as const) : ('model' as const),
-      text: turn.text
-    }));
+    if (isStreaming || !questionId) return;
 
     setTurns((prev) => [...prev, { role: 'student', text: message }]);
     setStreaming('');
@@ -59,8 +60,8 @@ export function QuizHintPanel({ isOpen, onClose, lessonId, questionId }: QuizHin
 
     try {
       const reply = await streamSse({
-        endpoint: '/ai/tutor/stream',
-        body: { lessonId, mode: 'quiz', message, questionId, history: history.slice(-6) },
+        endpoint: '/ai/quiz/hint',
+        body: { questionId, message },
         signal: controller.signal,
         onChunk: (chunk) => setStreaming((prev) => (prev ?? '') + chunk)
       });
@@ -108,12 +109,17 @@ export function QuizHintPanel({ isOpen, onClose, lessonId, questionId }: QuizHin
         {turns.map((turn, index) =>
           turn.role === 'student' ? (
             <div key={index} className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-3.5 py-2 text-white">
+              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-solid px-3.5 py-2 text-solid-foreground">
                 {turn.text}
               </div>
             </div>
           ) : (
-            <MarkdownMessage key={index} content={turn.text} />
+            <div key={index}>
+              <MarkdownMessage content={turn.text} />
+              <div className="-ml-2 mt-0.5">
+                <SpeakButton id={`hint-${index}`} content={turn.text} />
+              </div>
+            </div>
           )
         )}
 

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { SUBJECT_KEYS, SUBJECT_LABELS, type SubjectKey } from '@edplatform/shared';
+import { useStudent } from '@/context/student-context';
 import { fetchApi } from '@/lib/api';
 
 /**
@@ -16,6 +17,7 @@ import { fetchApi } from '@/lib/api';
 export default function LearnSubjectPage() {
   const params = useParams<{ subject: string }>();
   const router = useRouter();
+  const { isLoaded } = useStudent();
   const [error, setError] = useState<string | null>(null);
 
   const subjectKey = String(params.subject ?? '').toUpperCase() as SubjectKey;
@@ -26,6 +28,16 @@ export default function LearnSubjectPage() {
       setError('That subject does not exist.');
       return;
     }
+
+    // Wait for the auth context before creating the session.
+    //
+    // React runs child effects before parent effects, so on a cold load this
+    // POST went out before StudentProvider had registered the Clerk token
+    // getter. The backend correctly refused it, and the raw 401 message -
+    // "Authentication required. Please sign in to continue." - was rendered
+    // full-page to a student who was signed in, with their own class chip
+    // visible in the header above it.
+    if (!isLoaded) return;
 
     let cancelled = false;
 
@@ -46,7 +58,7 @@ export default function LearnSubjectPage() {
     return () => {
       cancelled = true;
     };
-  }, [isValid, subjectKey, router]);
+  }, [isLoaded, isValid, subjectKey, router]);
 
   if (error) {
     return (
@@ -55,7 +67,7 @@ export default function LearnSubjectPage() {
         <button
           type="button"
           onClick={() => router.push('/learn')}
-          className="ed-tap mt-5 rounded-lg bg-ink px-5 text-white hover:bg-black"
+          className="ed-tap mt-5 rounded-lg bg-solid px-5 text-solid-foreground hover:bg-solid-hover"
         >
           Back to Learn
         </button>

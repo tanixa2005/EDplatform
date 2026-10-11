@@ -5,6 +5,7 @@ import {
   CourseDetailDto,
   SafeUser
 } from '@edplatform/shared';
+import { isCourseVisibleToClass, type ClassLevel } from '@edplatform/shared';
 import { prisma } from '../config/prisma.config.js';
 import { NotFoundError, ForbiddenError, ConflictError } from '../errors/app.error.js';
 import { slugify } from '../utils/slug.util.js';
@@ -93,11 +94,27 @@ export class CourseService {
   /**
    * Retrieves all published courses for the public catalog.
    */
+  /**
+   * The student-facing catalogue.
+   *
+   * Results are filtered to the courses approved for the student's class level
+   * (see CLASS_COURSE_SLUGS in @edplatform/shared). This is a deliberate
+   * allowlist rather than a database column: course rows carry no class level,
+   * and legacy software-engineering courses must never reach a Class 6 student.
+   *
+   * No class level means no results. For a product used by children, failing
+   * closed is the right default.
+   */
   async getPublishedCourses(query?: {
     search?: string;
     level?: string;
     categoryId?: string;
+    classLevel?: ClassLevel | null;
   }): Promise<CourseCardDto[]> {
+    if (!query?.classLevel) {
+      return [];
+    }
+
     const whereClause: Record<string, unknown> = {
       isPublished: true
     };
@@ -121,7 +138,7 @@ export class CourseService {
       ];
     }
 
-    const courses = await prisma.course.findMany({
+    const allCourses = await prisma.course.findMany({
       where: whereClause,
       include: {
         instructor: {
@@ -138,6 +155,10 @@ export class CourseService {
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    const courses = allCourses.filter((course) =>
+      isCourseVisibleToClass(course.slug, query.classLevel)
+    );
 
     return courses.map((course) => ({
       id: course.id,
@@ -163,7 +184,19 @@ export class CourseService {
   /**
    * Retrieves course by ID or slug. Enforces unpublished course authorization.
    */
-  async getCourseByIdOrSlug(idOrSlug: string, currentUser?: SafeUser): Promise<CourseDetailDto> {
+  /**
+   * Course detail.
+   *
+   * `studentClassLevel` is read from the signed-in student's stored profile by
+   * the controller, never from the request. Before this gate existed, detail
+   * access was enrollment-only - and 10 enrollments already point at legacy
+   * technical courses, so a Class 6 student could fetch one by slug.
+   */
+  async getCourseByIdOrSlug(
+    idOrSlug: string,
+    currentUser?: SafeUser,
+    studentClassLevel?: ClassLevel | null
+  ): Promise<CourseDetailDto> {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
 
     const course = await prisma.course.findFirst({
@@ -175,7 +208,19 @@ export class CourseService {
           orderBy: { sortOrder: 'asc' },
           include: {
             lessons: {
-              orderBy: { sortOrder: 'asc' }
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                // Published quizzes only, id only. The chapter list needs to
+                // know a quiz exists; it must never carry questions or the
+                // answer key, which stay behind the quiz endpoints and their
+                // own authorization.
+                quizzes: {
+                  where: { isPublished: true },
+                  select: { id: true },
+                  orderBy: { createdAt: 'asc' },
+                  take: 1
+                }
+              }
             }
           }
         }
@@ -186,14 +231,23 @@ export class CourseService {
       throw new NotFoundError('Course not found');
     }
 
-    // Access check for unpublished courses
-    if (!course.isPublished) {
-      const isOwner = currentUser?.id === course.instructorId;
-      const isAdmin = currentUser?.role === 'ADMIN';
+    const isOwner = currentUser?.id === course.instructorId;
+    const isAdmin = currentUser?.role === 'ADMIN';
 
-      if (!isOwner && !isAdmin) {
-        throw new ForbiddenError('This course is not yet published');
-      }
+    // Access check for unpublished courses
+    if (!course.isPublished && !isOwner && !isAdmin) {
+      throw new ForbiddenError('This course is not yet published');
+    }
+
+    // Student curriculum visibility. Owners and admins keep unrestricted access,
+    // which the authoring and regression paths depend on. For anyone else the
+    // course must be curriculum-approved for their class, so a legacy technical
+    // course cannot be fetched straight from its slug.
+    //
+    // Deliberately the same NotFoundError as a course that does not exist, so
+    // slugs cannot be enumerated by comparing error responses.
+    if (!isOwner && !isAdmin && !isCourseVisibleToClass(course.slug, studentClassLevel)) {
+      throw new NotFoundError('Course not found');
     }
 
     // Check enrollment if user is logged in
@@ -255,7 +309,8 @@ export class CourseService {
           sortOrder: l.sortOrder,
           isFreePreview: l.isFreePreview,
           isPublished: l.isPublished,
-          moduleId: l.moduleId
+          moduleId: l.moduleId,
+          quizId: l.quizzes[0]?.id ?? null
         }))
       })),
       isEnrolled,

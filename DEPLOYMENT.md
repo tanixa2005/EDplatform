@@ -20,7 +20,7 @@ Configure these variables in your frontend hosting environment (e.g., Vercel Pro
 | `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | No | `/onboarding` | New students go straight to onboarding. |
 
 > [!IMPORTANT]
-> **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
+> **No Secrets in Frontend:** The frontend bundle is public. It must **never** contain `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, or any other private credentials. Only non-sensitive variables prefixed with `NEXT_PUBLIC_` are permitted.
 
 ---
 
@@ -39,10 +39,31 @@ Configure these variables in your backend hosting environment (e.g., Render, Rai
 | `COOKIE_SECURE` | No | `true` | Enforces `Secure` flag on `auth_token` cookie (defaults to `true` when `NODE_ENV=production`). |
 | `COOKIE_SAME_SITE` | **Yes** | `lax` or `none` | Set to `lax` for same-domain setups, or `none` if frontend and backend have different domains. |
 | `COOKIE_DOMAIN` | No | `.yourdomain.com` | Optional shared root domain for subdomains. Leave unset for host-only cookies. |
-| `GEMINI_API_KEY` | No | `AIzaSy...` | Google Gemini API key. If omitted, AI Tutor falls back safely to Mock provider. |
+| `OPENROUTER_API_KEY` | **Yes** (for live AI) | none | Your OpenRouter API key. Set it in the host's secret store. Without it the app serves the offline Mock instead of AI tutoring. See [AI tutor provider](#ai-tutor-provider-openrouter). |
+| `OPENROUTER_MODEL` | No | `apodex/apodex-1.1-mini:free` | Text model for ordinary tutoring. |
+| `OPENROUTER_VISION_MODEL` | No | `openrouter/free` | Route used only for questions that include a photo. Empty turns photo questions off. |
 | `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Verifies Clerk session tokens locally against the cached JWKS. While unset, the backend falls back to the legacy JWT cookie. |
 | `CLERK_PUBLISHABLE_KEY` | No | `pk_live_...` | Clerk instance identifier. |
 | `CLERK_WEBHOOK_SECRET` | **Yes** | `whsec_...` | Svix signing secret for the `user.created` / `user.updated` / `user.deleted` webhook. Without it the webhook endpoint refuses every request. |
+
+### AI tutor provider (OpenRouter)
+
+The AI tutor uses two OpenRouter routes. **Both must be configured and checked on the deployment host.** They are separate settings, so changing one does not change the other.
+
+- **Text route** (`OPENROUTER_MODEL`) is used for every ordinary tutoring turn. The default is `apodex/apodex-1.1-mini:free`.
+- **Photo route** (`OPENROUTER_VISION_MODEL`) is used only when a question includes a photo. The default is `openrouter/free`, OpenRouter's free router. A value in the host's environment replaces the default. The code accepts only `openrouter/free` or a model id ending in `:free`; any other id is refused and students see a clear photo message instead. Set it to an empty value to turn photo questions off.
+
+Keep keys and private URLs out of the repository and this document. Set `OPENROUTER_API_KEY` in the host's secret store only.
+
+**Missing configuration is not a working AI provider.** Without `OPENROUTER_API_KEY` the app still starts, and it serves the offline Mock. The Mock gives canned replies, not tutoring. Treat that as a failed deployment, not a successful one.
+
+**Check both routes after every deploy:**
+
+1. Open the backend's startup log on the host. It should contain one line in this form:
+   `AI provider: OpenRouter (<text model>), photos: <photo route>`
+   If it reads `AI provider: Mock (OPENROUTER_API_KEY not set)`, the key is missing.
+2. Confirm the two model ids in that line are the intended ones, and confirm on your OpenRouter account that the photo route is free.
+3. On the deployed app, send one text question and one photo question. Each should get a real answer.
 
 > [!IMPORTANT]
 > **Cookies are no longer used for API authentication.** The frontend sends the
@@ -159,7 +180,7 @@ When deploying `apps/frontend` to **Vercel**:
    - `NEXT_PUBLIC_APP_URL`: Set to your live frontend URL (e.g. `https://edplatform.com`).
 
 4. **Zero Backend Secrets on Vercel**:
-   - Vercel **does not** require `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, or any backend secrets.
+   - Vercel **does not** require `DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`, or any backend secrets.
    - Prisma Client generation is decoupled and executed strictly in backend deployment pipelines (e.g., Render/Railway/Fly.io).
 
 ---

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SignInButton, SignUpButton } from '@clerk/nextjs';
-import { ArrowRight, Camera, Loader2, MessageCircle, Mic } from 'lucide-react';
+import { ArrowRight, Loader2, MessageCircle, Zap } from 'lucide-react';
 import {
   CLASS_LEVEL_LABELS,
   type StudentProfileDto,
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { EdLogo } from '@/components/shared/ed-logo';
 import { useStudent } from '@/context/student-context';
 import { fetchApi } from '@/lib/api';
+import { setPendingImage } from '@/lib/pending-image';
 
 interface HomeContext {
   profile: StudentProfileDto | null;
@@ -81,18 +82,24 @@ function AskEdHome({ firstName }: { firstName: string | null }) {
 
   /** Creates a session, then hands the opening question to the tutor canvas. */
   const startSession = useCallback(
-    async (message: string) => {
+    async (message: string, image?: File | null) => {
       if (isStarting) return;
       setIsStarting(true);
       setError(null);
 
       try {
+        // Session creation stays JSON. The photo belongs to the first turn,
+        // which happens after navigation, so it is handed over in memory
+        // rather than written anywhere.
         const data = await fetchApi<{ session: { id: string } }>('/tutor/sessions', {
           method: 'POST',
-          body: JSON.stringify({ message })
+          body: JSON.stringify(message ? { message } : {})
         });
+        if (image) setPendingImage(image);
         router.push(
-          `/tutor/${data.session.id}?ask=${encodeURIComponent(message)}`
+          message
+            ? `/tutor/${data.session.id}?ask=${encodeURIComponent(message)}`
+            : `/tutor/${data.session.id}`
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not start a session');
@@ -120,7 +127,7 @@ function AskEdHome({ firstName }: { firstName: string | null }) {
 
         <div className="mt-5">
           <AskBar
-            onSubmit={startSession}
+            onSubmit={(message, image) => void startSession(message, image)}
             disabled={isStarting}
             placeholder="Ask me anything…"
           />
@@ -158,6 +165,33 @@ function AskEdHome({ firstName }: { firstName: string | null }) {
         </div>
       </section>
 
+      {/* The way back into practice.
+          /tutor/home has always returned the last attempt and the home screen
+          never rendered it, so the loop ended here: a student who had just
+          worked through a mistake with ED had no route back to the quiz except
+          navigating Learn again. One row, in the same shape as the session
+          rows below, into the Practice tab that lists the attempt. */}
+      {context?.lastQuizAttempt && (
+        <section className="mt-6">
+          <Link
+            href="/practice"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-primary/40"
+          >
+            <Zap className="h-5 w-5 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">Back to your last practice</span>
+              {/* Score first: at 375px the quiz title alone fills the line, and
+                  truncation was swallowing the number the row exists to show. */}
+              <span className="block truncate text-sm text-muted-foreground">
+                {Math.round(context.lastQuizAttempt.percentage)}% ·{' '}
+                {context.lastQuizAttempt.quizTitle}
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </Link>
+        </section>
+      )}
+
       {/* Pick up where you left off: resumes a conversation, not a video */}
       {context && context.recentSessions.length > 0 && (
         <section className="mt-10">
@@ -187,20 +221,6 @@ function AskEdHome({ firstName }: { firstName: string | null }) {
         </section>
       )}
 
-      {/* What is coming next. Honest about Phase 1 scope rather than faking it. */}
-      <section className="mt-10 rounded-xl border border-dashed border-border bg-secondary/40 p-4">
-        <h2 className="text-sm font-bold">Coming soon</h2>
-        <ul className="mt-2.5 space-y-2 text-sm text-muted-foreground">
-          <li className="flex items-center gap-2.5">
-            <Camera className="h-4 w-4 shrink-0 text-primary" />
-            Snap a photo of your homework and ED will guide you through it
-          </li>
-          <li className="flex items-center gap-2.5">
-            <Mic className="h-4 w-4 shrink-0 text-primary" />
-            Say your question out loud and listen to ED explain
-          </li>
-        </ul>
-      </section>
     </div>
   );
 }

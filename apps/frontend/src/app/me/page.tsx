@@ -39,11 +39,20 @@ export default function MePage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Wait for the auth context before fetching.
+  //
+  // Same race C13.1 fixed on /practice and /learn/[subject], missed here
+  // because this page does reference isLoaded - but only to guard the render,
+  // not the request. React runs child effects before parent effects, so on a
+  // cold load this went out before StudentProvider had registered the Clerk
+  // token getter, came back 401, and the catch hid it: the three progress
+  // lines simply never appeared, with nothing to say why.
   useEffect(() => {
+    if (!isLoaded) return;
     fetchApi<StudentDashboardDto>('/dashboard/student')
       .then(setDashboard)
       .catch(() => setDashboard(null));
-  }, []);
+  }, [isLoaded]);
 
   async function save(patch: {
     classLevel?: ClassLevel;

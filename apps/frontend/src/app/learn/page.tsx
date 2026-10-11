@@ -14,7 +14,9 @@ interface CourseListItem {
   slug: string;
   shortSummary?: string;
   description: string;
-  _count?: { enrollments: number; modules: number };
+  // The list endpoint returns modulesCount, not a Prisma _count relation.
+  // This interface used to say _count, so the chapter line never rendered.
+  modulesCount?: number;
 }
 
 /**
@@ -43,9 +45,19 @@ export default function LearnPage() {
     }
   }
 
+  // Wait for the auth context before fetching.
+  //
+  // React runs child effects before parent effects, so on mount this component
+  // ran before StudentProvider had registered the Clerk token getter. The
+  // /courses request therefore went out with no Authorization header, the
+  // server saw an anonymous caller with no class, and class visibility
+  // correctly returned nothing - so a signed-in Class 6 student was shown
+  // "No lessons here yet" and the whole Learn path was invisible. The empty
+  // dependency array meant it never retried.
   useEffect(() => {
+    if (!isLoaded) return;
     void load();
-  }, []);
+  }, [isLoaded]);
 
   const subjects: SubjectKey[] = profile?.subjects ?? [];
 
@@ -104,7 +116,7 @@ export default function LearnPage() {
               Lessons for your class are on the way. In the meantime, just ask ED
               anything you are stuck on.
             </p>
-            <Link href="/" className="ed-tap mt-4 rounded-lg bg-ink px-5 text-white hover:bg-black">
+            <Link href="/" className="ed-tap mt-4 rounded-lg bg-solid px-5 text-solid-foreground hover:bg-solid-hover">
               Ask ED
             </Link>
           </div>
@@ -122,10 +134,10 @@ export default function LearnPage() {
                       {course.shortSummary || course.description}
                     </p>
                   )}
-                  {course._count?.modules != null && (
+                  {course.modulesCount != null && course.modulesCount > 0 && (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      {course._count.modules} chapter
-                      {course._count.modules === 1 ? '' : 's'}
+                      {course.modulesCount} chapter
+                      {course.modulesCount === 1 ? '' : 's'}
                     </p>
                   )}
                 </Link>

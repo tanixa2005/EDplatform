@@ -8,6 +8,7 @@ import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs';
 import { CLASS_LEVEL_LABELS } from '@edplatform/shared';
 import { EdLogo } from '@/components/shared/ed-logo';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { useStudent } from '@/context/student-context';
 
 /**
@@ -37,7 +38,12 @@ export function StudentNav() {
             <EdLogo size={22} showWordmark />
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* In the header rather than the bottom bar: the header is the one
+                piece of chrome present on every screen and in both signed-in
+                and signed-out states. */}
+            <ThemeToggle />
+
             {classLabel && (
               <Link
                 href="/me"

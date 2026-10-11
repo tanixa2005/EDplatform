@@ -9,7 +9,7 @@ export class ProgressController {
       const lessonId = req.params.lessonId || req.body.lessonId;
       const progress = await progressService.updateProgress(
         { ...req.body, lessonId },
-        req.user.id
+        req.user
       );
       res.status(200).json({ success: true, data: { progress } });
     } catch (error) {

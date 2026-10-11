@@ -13,7 +13,6 @@ import {
   ArrowRight,
   Award,
   Clock,
-  ShieldCheck,
   AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +21,7 @@ import { Progress } from '@/components/ui/progress';
 import { fetchApi } from '@/lib/api';
 import { useStudent } from '@/context/student-context';
 import { AskEdButton } from '@/components/tutor/ask-ed-button';
+import { MarkdownMessage } from '@/components/ai/markdown-message';
 
 interface PlaybackDetails {
   type: string;
@@ -80,7 +80,7 @@ export default function LessonClassroomPage({
 }) {
   const resolvedParams = React.use(params);
   const { slug, lessonId } = resolvedParams;
-  const { student: user } = useStudent();
+  const { student: user, isLoaded: authLoaded } = useStudent();
 
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [progress, setProgress] = useState<LessonProgressRecord | null>(null);
@@ -103,6 +103,7 @@ export default function LessonClassroomPage({
 
   // Load lesson and existing progress
   const loadLessonData = useCallback(async () => {
+    if (!authLoaded) return;
     try {
       setIsLoading(true);
       setError(null);
@@ -139,8 +140,14 @@ export default function LessonClassroomPage({
     } finally {
       setIsLoading(false);
     }
-  }, [lessonId, user]);
+  }, [lessonId, user, authLoaded]);
 
+  // Wait for the auth context before fetching. React runs child effects before
+  // parent effects, so on mount this ran before StudentProvider registered the
+  // Clerk token getter, and the request went out with no Authorization header.
+  // Until C6/C7 those anonymous reads succeeded through isFreePreview, which is
+  // why this never surfaced; now they are correctly refused, and the failed
+  // first request raced ahead of the authenticated retry.
   useEffect(() => {
     loadLessonData();
   }, [loadLessonData]);
@@ -272,13 +279,21 @@ export default function LessonClassroomPage({
         <div className="p-4 rounded-lg bg-destructive/10 text-destructive w-fit mx-auto">
           <AlertCircle className="h-8 w-8" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground">Access Restricted</h2>
+        <h2 className="text-2xl font-bold text-foreground">We could not open this</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          {error || 'You must enroll in this course to access this lesson.'}
+          {/* Not always an enrollment problem any more. A curriculum lesson can
+              also fail because it belongs to another class, in which case the
+              server deliberately answers "not found". */}
+          {error || 'This lesson is not available for your class.'}
         </p>
-        <Link href={`/courses/${slug}`} className="inline-block pt-2">
-          <Button className="rounded-md">Return to Course Overview</Button>
-        </Link>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <Link href={`/courses/${slug}`} className="inline-block">
+            <Button variant="outline" className="rounded-md">Back to chapters</Button>
+          </Link>
+          <Link href="/learn" className="inline-block">
+            <Button className="rounded-md">Go to Learn</Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -291,7 +306,7 @@ export default function LessonClassroomPage({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Top Control Bar */}
-        <div className="border-b border-border bg-[#FFFDF8] px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div className="border-b border-border bg-background px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center space-x-3 min-w-0">
             <Link
               href={`/courses/${lesson.courseSlug}`}
@@ -355,12 +370,17 @@ export default function LessonClassroomPage({
               <Badge variant="outline" className="text-xs rounded-md border-border bg-muted/40">
                 Text Lesson
               </Badge>
-              <div className="prose dark:prose-invert max-w-none text-foreground leading-relaxed text-sm sm:text-base">
-                {lesson.content || 'No text content available for this lesson.'}
-              </div>
+              {/* Curriculum topics are authored in Markdown, so render them as
+                  Markdown. Previously this printed the raw source, which showed
+                  '##' and '**' to the student. Reuses the tutor's renderer. */}
+              {lesson.content ? (
+                <MarkdownMessage content={lesson.content} />
+              ) : (
+                <p className="text-muted-foreground">No text content available for this lesson.</p>
+              )}
               {!isCompleted && user && (
                 <div className="pt-4 border-t border-border">
-                  <Button onClick={() => syncProgress(true)} size="sm" className="rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
+                  <Button onClick={() => syncProgress(true)} size="sm" className="rounded-md bg-solid text-solid-foreground hover:bg-solid-hover font-semibold">
                     Mark as Completed
                   </Button>
                 </div>
@@ -368,15 +388,19 @@ export default function LessonClassroomPage({
             </div>
           )}
 
-          {/* Meaningful Progress Bar & Milestone Status */}
-          {user && (
+          {/* Meaningful Progress Bar & Milestone Status.
+              Video only: watch coverage says nothing about a reading topic, and
+              telling a Class 6 student that a page of text needs "90% playback
+              for credit" is just confusing. TEXT topics get the plain done
+              line below instead. */}
+          {user && lesson.type === 'VIDEO' && (
             <div className="rounded-lg border border-border bg-card p-5 space-y-2.5 shadow-xs">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className="flex items-center space-x-1.5 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5 text-primary" />
                   <span>Playback Watch Coverage</span>
                 </span>
-                <span className={isCompleted ? 'text-emerald-700 font-bold' : 'text-primary font-bold'}>
+                <span className={isCompleted ? 'text-emerald-700 dark:text-emerald-300 font-bold' : 'text-primary font-bold'}>
                   {coverage}% {isCompleted ? '(Lesson Verified)' : '(90% required for credit)'}
                 </span>
               </div>
@@ -387,7 +411,7 @@ export default function LessonClassroomPage({
               />
 
               {isCompleted ? (
-                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 pt-1">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 pt-1">
                   <CheckCircle2 className="h-4 w-4" />
                   <span>Lesson requirement completed! Verified watch threshold met.</span>
                 </div>
@@ -399,11 +423,18 @@ export default function LessonClassroomPage({
             </div>
           )}
 
+          {user && lesson.type === 'TEXT' && isCompleted && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-600/30 bg-emerald-50/60 dark:bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>You finished this one.</span>
+            </div>
+          )}
+
           {/* Lesson Quiz Banner */}
           {lessonQuiz && user && (
-            <div className="rounded-lg border border-border bg-[#FFFDF8] p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
+            <div className="rounded-lg border border-border bg-background p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
               <div className="flex items-center space-x-3.5">
-                <div className="p-3 rounded-md bg-[#FDE8E7] text-primary border border-primary/20">
+                <div className="p-3 rounded-md bg-accent text-primary border border-primary/20">
                   <Award className="h-6 w-6" />
                 </div>
                 <div>
@@ -423,7 +454,7 @@ export default function LessonClassroomPage({
               </div>
 
               <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.id}/quiz`}>
-                <Button size="sm" className="space-x-1.5 w-full sm:w-auto rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
+                <Button size="sm" className="space-x-1.5 w-full sm:w-auto rounded-md bg-solid text-solid-foreground hover:bg-solid-hover font-semibold">
                   <span>Take Lesson Quiz</span>
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -457,7 +488,7 @@ export default function LessonClassroomPage({
 
             {lesson.nextLesson ? (
               <Link href={`/courses/${lesson.courseSlug}/lessons/${lesson.nextLesson.id}`}>
-                <Button size="sm" className="space-x-1.5 rounded-md bg-[#111111] text-white hover:bg-black font-semibold">
+                <Button size="sm" className="space-x-1.5 rounded-md bg-solid text-solid-foreground hover:bg-solid-hover font-semibold">
                   <span className="hidden sm:inline">Next:</span>
                   <span className="truncate max-w-[120px]">{lesson.nextLesson.title}</span>
                   <ChevronRight className="h-4 w-4" />
@@ -466,8 +497,8 @@ export default function LessonClassroomPage({
             ) : (
               <Link href={`/courses/${lesson.courseSlug}`}>
                 <Button variant="outline" size="sm" className="space-x-1.5 rounded-md border-border font-medium">
-                  <span>Finish Course</span>
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span>Back to chapters</span>
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             )}
@@ -477,7 +508,7 @@ export default function LessonClassroomPage({
 
       {/* Right Curriculum Navigation Sidebar (Desktop + Mobile Drawer) */}
       <aside
-        className={`fixed inset-y-0 right-0 z-50 w-80 bg-[#FFFDF8] border-l border-border flex flex-col transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 right-0 z-50 w-80 bg-background border-l border-border flex flex-col transition-transform duration-300 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -497,10 +528,14 @@ export default function LessonClassroomPage({
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-border p-3 space-y-4">
-          {lesson.courseNavigation.map((mod, modIdx) => (
+          {lesson.courseNavigation.map((mod) => (
             <div key={mod.id} className="pt-2">
-              <div className="px-3 py-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wider font-mono">
-                Module {modIdx + 1}: {mod.title}
+              {/* No derived number. The sidebar index is an array position, not
+                  the official chapter number - two-part NCERT books restart
+                  numbering at 1, so printing the index would misstate the
+                  syllabus. Same rule as the course page. */}
+              <div className="px-3 py-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                {mod.title}
               </div>
 
               <div className="mt-1 space-y-1">
@@ -513,13 +548,13 @@ export default function LessonClassroomPage({
                       onClick={() => setSidebarOpen(false)}
                       className={`flex items-center justify-between px-3 py-2.5 rounded-md text-xs transition-colors ${
                         isActive
-                          ? 'bg-[#111111] text-white font-semibold'
+                          ? 'bg-solid text-solid-foreground font-semibold'
                           : 'hover:bg-muted/50 text-foreground'
                       }`}
                     >
                       <div className="flex items-center space-x-2 truncate">
                         {isActive ? (
-                          <div className="h-1.5 w-1.5 rounded-full bg-[#E53935] shrink-0" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
                         ) : (
                           <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
                         )}
@@ -529,7 +564,7 @@ export default function LessonClassroomPage({
                       {navLesson.videoDuration ? (
                         <span
                           className={`text-[10px] ml-2 font-mono ${
-                            isActive ? 'text-white/70' : 'text-muted-foreground'
+                            isActive ? 'text-solid-foreground/70' : 'text-muted-foreground'
                           }`}
                         >
                           {Math.round(navLesson.videoDuration / 60)}m

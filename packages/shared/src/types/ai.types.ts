@@ -5,14 +5,6 @@ export interface AIMessageHistory {
   text: string;
 }
 
-export interface AITutorStreamRequest {
-  lessonId: string;
-  mode: AITutorMode;
-  message: string;
-  questionId?: string;
-  history?: AIMessageHistory[];
-}
-
 export type MistakeCategory =
   | 'misconception'
   | 'calculation_error'
@@ -31,6 +23,18 @@ export interface QuestionMistakeAnalysis {
   explanation: string;
   recommendedAction: string;
   practicePrompt: string;
+  /**
+   * Where "worth re-reading" points, when it can point anywhere.
+   *
+   * Both optional. They are absent when the resolved topic is unpublished or
+   * unresolvable, and absent from every analysis cached before C13.3, so an
+   * older cached result still parses and simply renders as plain text. Treat
+   * missing ids as "not linkable", never as an error.
+   *
+   * Server-derived from the question's own topic. Never client-supplied.
+   */
+  topicLessonId?: string;
+  topicCourseSlug?: string;
 }
 
 export interface QuizMistakeAnalysisResult {

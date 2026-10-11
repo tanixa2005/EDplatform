@@ -32,9 +32,24 @@ export const tutorTurnSchema = z
     message: 'Send a message or pick a quick action'
   });
 
+/**
+ * A turn that carries a photo.
+ *
+ * Separate from tutorTurnSchema because the "message or action" requirement
+ * does not hold here: a photo on its own is a complete request, and the server
+ * supplies a default instruction for it. The image itself is NOT described in
+ * this schema - it arrives as multipart and is validated from its bytes, never
+ * from anything the client says about it.
+ */
+export const tutorImageTurnSchema = z.object({
+  message: z.string().trim().min(1).max(2000).optional(),
+  action: tutorQuickActionSchema.optional()
+});
+
 export const listTutorSessionsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20)
 });
 
 export type CreateTutorSessionInput = z.infer<typeof createTutorSessionSchema>;
 export type TutorTurnInput = z.infer<typeof tutorTurnSchema>;
+export type TutorImageTurnInput = z.infer<typeof tutorImageTurnSchema>;

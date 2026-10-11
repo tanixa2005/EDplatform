@@ -203,6 +203,8 @@ model Module {
 
   lessons     Lesson[]
   quizzes     Quiz[]
+  /// Sessions anchored to this chapter rather than to one of its topics.
+  tutorSessions TutorSession[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -218,6 +220,26 @@ model Lesson {
   description   String?          @db.Text
   type          LessonType       @default(VIDEO)
   content       String?          @db.Text
+
+  /// A short, reviewed teaching reference for ED about this topic.
+  ///
+  /// Not the page body. `content` is 1.3-1.7k characters of prose written to
+  /// be READ by a student; this is the teaching skeleton the tutor needs -
+  /// the key idea, the worked example the page actually uses, the vocabulary
+  /// it introduces, the usual misconception. Sending the whole article every
+  /// turn would cost tokens for text the model does not need in that form.
+  ///
+  /// Null is the normal state and means "no brief": the prompt then behaves
+  /// exactly as it did before this column existed. It is never inferred,
+  /// never generated at request time, and never written from a request - the
+  /// only writer is a seed, so a client cannot put words into ED's trusted
+  /// context.
+  ///
+  /// OPERATIONAL RULE, because this phase adds no review metadata: only
+  /// original, human-reviewed briefs may be written here. The prompt labels
+  /// whatever is stored as reviewed, so an unreviewed value would be a lie
+  /// told in ED's own voice.
+  teachingBrief String?          @db.Text
   videoUrl      String?          // Direct URL / CDN URL / Embed
   videoDuration Int?             // Duration in seconds
   sortOrder     Int              @default(0)
@@ -230,7 +252,11 @@ model Lesson {
   resources     Resource[]
   progress      LessonProgress[]
   tutorSessions TutorSession[]
+  /// Quizzes hosted on this topic (Quiz.lessonId).
   quizzes       Quiz[]
+  /// Questions that assess this topic, wherever they are hosted
+  /// (QuizQuestion.lessonId). A chapter quiz's questions point here.
+  assessedBy    QuizQuestion[]   @relation("QuestionTopic")
 
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -343,6 +369,25 @@ model QuizQuestion {
   quizId      String
   quiz        Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
+  /// The curriculum topic this question actually assesses.
+  ///
+  /// Quiz.lessonId answers a different question - where the quiz LIVES and how
+  /// a student reaches it - and is also the authorisation anchor. A chapter
+  /// quick check draws on several topics, so using the host lesson as "what
+  /// this question is about" sent every mistake to the same topic regardless
+  /// of what was missed.
+  ///
+  /// Null means "no topic of its own": fall back to the quiz's anchor, which
+  /// is exactly how every question behaved before this field existed. Legacy
+  /// questions stay null and nothing about them changes.
+  ///
+  /// Deliberately NOT onDelete: Cascade. Quiz.lesson cascades because a quiz
+  /// attached to a deleted topic has nowhere to live. A question that merely
+  /// REFERENCES a topic must survive it, or deleting a topic would silently
+  /// destroy quiz questions and every QuizAnswer hanging off them.
+  lessonId    String?
+  lesson      Lesson?        @relation("QuestionTopic", fields: [lessonId], references: [id], onDelete: SetNull)
+
   options     QuizOption[]
   answers     QuizAnswer[]
 
@@ -351,6 +396,7 @@ model QuizQuestion {
 
   @@index([quizId])
   @@index([sortOrder])
+  @@index([lessonId])
 }
 
 model QuizOption {
@@ -442,6 +488,24 @@ model TutorSession {
   lessonId     String?
   lesson       Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
+  /// The chapter this session is about, when it is about a chapter rather
+  /// than one topic.
+  ///
+  /// 139 of the 149 curriculum chapters have no lessons written yet, so for
+  /// those the chapter is the ONLY anchor a session can have. Before this,
+  /// such a session carried the chapter name in its opening message and
+  /// nowhere else - and the model only sees the last 12 messages, so the
+  /// chapter was evicted after six exchanges and never came back.
+  ///
+  /// Written only by createSessionFromChapter, after that module has passed
+  /// the curriculum gate. It is deliberately absent from every client-facing
+  /// schema, so there is no request a student can make that sets it.
+  ///
+  /// SetNull, like lessonId: deleting a chapter must never delete a child's
+  /// conversation.
+  moduleId     String?
+  module       Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+
   classLevel   ClassLevel
   subject      SubjectKey?
   title        String
@@ -455,6 +519,7 @@ model TutorSession {
 
   @@index([userId, lastActiveAt])
   @@index([lessonId])
+  @@index([moduleId])
 }
 
 model TutorMessage {

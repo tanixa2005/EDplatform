@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Progress } from '@/components/ui/progress';
 
 import { fetchApi } from '@/lib/api';
+import { useStudent } from '@/context/student-context';
 import { QuizHintPanel } from '@/components/tutor/quiz-hint-panel';
 import {
   QuizDetailStudentDto,
@@ -34,6 +35,7 @@ export default function QuizPlayerPage({
   const resolvedParams = React.use(params);
   const { slug, lessonId } = resolvedParams;
   const router = useRouter();
+  const { isLoaded: authLoaded } = useStudent();
 
   const [quiz, setQuiz] = useState<QuizDetailStudentDto | null>(null);
   const [activeAttempt, setActiveAttempt] = useState<QuizAttemptSummaryDto | null>(null);
@@ -83,11 +85,18 @@ export default function QuizPlayerPage({
     } finally {
       setIsLoading(false);
     }
-  }, [lessonId]);
+  }, [lessonId, authLoaded]);
 
+  // Wait for the auth context before fetching. React runs child effects before
+  // parent effects, so on mount this ran before StudentProvider registered the
+  // Clerk token getter and the request went out unauthenticated. Until C6/C7
+  // those anonymous reads succeeded through isFreePreview, which is why this
+  // never surfaced; now they are correctly refused, and with no retry the page
+  // was left showing "Sign in" to a signed-in student.
   useEffect(() => {
+    if (!authLoaded) return;
     loadQuizData();
-  }, [loadQuizData]);
+  }, [loadQuizData, authLoaded]);
 
   // Handle countdown timer
   useEffect(() => {
@@ -182,7 +191,7 @@ export default function QuizPlayerPage({
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-3">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground font-medium">Loading quiz environment...</p>
+          <p className="text-sm text-muted-foreground font-medium">Getting your questions ready&hellip;</p>
         </div>
       </div>
     );
@@ -194,10 +203,10 @@ export default function QuizPlayerPage({
         <div className="p-4 rounded-lg bg-destructive/10 text-destructive w-fit mx-auto">
           <AlertTriangle className="h-8 w-8" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground">Quiz Unavailable</h2>
+        <h2 className="text-2xl font-bold text-foreground">No questions here</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">{error || 'Quiz is not available for this lesson.'}</p>
         <Link href={`/courses/${slug}/lessons/${lessonId}`} className="inline-block pt-2">
-          <Button className="rounded-md">Back to Lesson</Button>
+          <Button className="rounded-md">Back to the topic</Button>
         </Link>
       </div>
     );
@@ -220,7 +229,7 @@ export default function QuizPlayerPage({
               className="inline-flex items-center text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-1.5" />
-              <span>Back to Classroom</span>
+              <span>Back to the topic</span>
             </Link>
 
             {activeAttempt && remainingSeconds !== null && (
@@ -235,10 +244,10 @@ export default function QuizPlayerPage({
           {!activeAttempt ? (
             <div className="space-y-6">
               <Card className="border-border rounded-lg shadow-sm overflow-hidden bg-card">
-                <CardHeader className="space-y-3 bg-[#FFFDF8] border-b border-border p-6 sm:p-8">
-                  <div className="inline-flex items-center space-x-2 rounded-md border border-[#E53935]/20 bg-[#FDE8E7] px-3 py-1 text-xs font-semibold text-[#B91C1C] w-fit">
+                <CardHeader className="space-y-3 bg-background border-b border-border p-6 sm:p-8">
+                  <div className="inline-flex items-center space-x-2 rounded-md border border-primary/20 bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground w-fit">
                     <Award className="h-3.5 w-3.5" />
-                    <span>Lesson Knowledge Check</span>
+                    <span>Practice</span>
                   </div>
                   <CardTitle className="text-3xl font-extrabold font-display">{quiz.title}</CardTitle>
                   {quiz.description && (
@@ -250,7 +259,7 @@ export default function QuizPlayerPage({
 
                 <CardContent className="space-y-6 p-6 sm:p-8">
                   {/* Key Details Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-md bg-[#FFFDF8] border border-border shadow-xs text-center">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-md bg-background border border-border shadow-xs text-center">
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground font-medium">Questions</span>
                       <div className="text-xl font-black text-foreground font-display font-mono">{quiz.questionsCount}</div>
@@ -261,7 +270,7 @@ export default function QuizPlayerPage({
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground font-medium">Passing Score</span>
-                      <div className="text-xl font-black text-emerald-700 font-display font-mono">{quiz.passingScore}%</div>
+                      <div className="text-xl font-black text-emerald-700 dark:text-emerald-300 font-display font-mono">{quiz.passingScore}%</div>
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground font-medium">Time Limit</span>
@@ -274,12 +283,12 @@ export default function QuizPlayerPage({
                   {bestAttempt && (
                     <div className="rounded-md border border-border p-4 sm:p-5 flex items-center justify-between bg-card shadow-xs">
                       <div className="flex items-center space-x-3.5">
-                        <div className={`p-2.5 rounded-md ${bestAttempt.isPassed ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-[#FDE8E7] text-[#B91C1C] border border-[#E53935]/20'}`}>
+                        <div className={`p-2.5 rounded-md ${bestAttempt.isPassed ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20' : 'bg-accent text-accent-foreground border border-primary/20'}`}>
                           <Award className="h-6 w-6" />
                         </div>
                         <div>
                           <div className="text-xs sm:text-sm font-bold text-foreground">
-                            Previous Best Score: {bestAttempt.score}%
+                            Best so far: {bestAttempt.score}%
                           </div>
                           <div className="text-[11px] text-muted-foreground">
                             Status: {bestAttempt.isPassed ? 'Passed' : 'Needs Practice'} &bull; {new Date(bestAttempt.startedAt).toLocaleDateString()}
@@ -291,21 +300,21 @@ export default function QuizPlayerPage({
                         href={`/courses/${slug}/lessons/${lessonId}/quiz/results/${bestAttempt.id}`}
                       >
                         <Button variant="outline" size="sm" className="text-xs rounded-md border-border font-medium">
-                          Review Attempt
+                          See your answers
                         </Button>
                       </Link>
                     </div>
                   )}
                 </CardContent>
 
-                <CardFooter className="flex justify-between border-t border-border p-6 bg-[#FFFDF8]">
+                <CardFooter className="flex justify-between border-t border-border p-6 bg-background">
                   <Link href={`/courses/${slug}/lessons/${lessonId}`}>
-                    <Button variant="ghost" className="rounded-md">Return to Lesson</Button>
+                    <Button variant="ghost" className="rounded-md">Back to the topic</Button>
                   </Link>
 
-                  <Button onClick={handleStartAttempt} className="space-x-2 text-sm px-6 rounded-md bg-[#111111] text-white hover:bg-black font-bold">
+                  <Button onClick={handleStartAttempt} className="space-x-2 text-sm px-6 rounded-md bg-solid text-solid-foreground hover:bg-solid-hover font-bold">
                     <Play className="h-4 w-4 fill-current text-white" />
-                    <span>{attemptsHistory.length > 0 ? 'Retake Quiz' : 'Start Knowledge Check'}</span>
+                    <span>{attemptsHistory.length > 0 ? 'Try again' : 'Start'}</span>
                   </Button>
                 </CardFooter>
               </Card>
@@ -313,7 +322,7 @@ export default function QuizPlayerPage({
               {/* Attempt History Table */}
               {attemptsHistory.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-bold text-foreground font-display">Attempt History</h3>
+                  <h3 className="text-sm font-bold text-foreground font-display">Earlier tries</h3>
                   <div className="divide-y divide-border rounded-lg border border-border bg-card overflow-hidden shadow-xs">
                     {attemptsHistory.map((att, idx) => (
                       <div key={att.id} className="p-3.5 px-4 flex items-center justify-between text-xs hover:bg-muted/20">
@@ -328,7 +337,7 @@ export default function QuizPlayerPage({
                         <div className="flex items-center space-x-3">
                           <Badge
                             variant={att.isPassed ? 'default' : 'secondary'}
-                            className={`text-[10px] rounded-md ${att.isPassed ? 'bg-emerald-500/10 text-emerald-800 border-emerald-500/30' : ''}`}
+                            className={`text-[10px] rounded-md ${att.isPassed ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30' : ''}`}
                           >
                             {att.isPassed ? 'Passed' : 'Failed'}
                           </Badge>
@@ -372,9 +381,9 @@ export default function QuizPlayerPage({
                       onClick={() => setCurrentQuestionIndex(idx)}
                       className={`h-9 w-9 rounded-md text-xs font-bold transition-all font-mono ${
                         isCurrent
-                          ? 'border-2 border-[#111111] bg-[#111111] text-white shadow-xs'
+                          ? 'border-2 border-solid bg-solid text-solid-foreground shadow-xs'
                           : isAnswered
-                          ? 'bg-[#FDE8E7] text-[#B91C1C] border border-[#E53935]/30 font-semibold'
+                          ? 'bg-accent text-accent-foreground border border-primary/30 font-semibold'
                           : 'border border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                       }`}
                     >
@@ -387,7 +396,7 @@ export default function QuizPlayerPage({
               {/* Question Card */}
               {currentQuestion && (
                 <Card className="border-border rounded-lg shadow-sm overflow-hidden bg-card">
-                  <CardHeader className="space-y-2 pb-4 bg-[#FFFDF8] border-b border-border p-6">
+                  <CardHeader className="space-y-2 pb-4 bg-background border-b border-border p-6">
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="text-[10px] uppercase tracking-wider rounded-md border-border bg-card">
                         {currentQuestion.type === 'MULTIPLE_CHOICE'
@@ -404,7 +413,7 @@ export default function QuizPlayerPage({
                           variant="outline"
                           size="sm"
                           onClick={() => setAiTutorOpen(true)}
-                          className="h-8 text-xs border-amber-600/30 bg-[#FFF3CD]/60 text-amber-900 hover:bg-[#FFF3CD] space-x-1.5 rounded-md font-semibold"
+                          className="h-8 text-xs border-amber-600/30 bg-cream/60 text-amber-900 dark:text-amber-300 hover:bg-cream space-x-1.5 rounded-md font-semibold"
                         >
                           <Sparkles className="h-3.5 w-3.5 text-amber-700" />
                           <span>AI Hint</span>
@@ -426,14 +435,14 @@ export default function QuizPlayerPage({
                           onClick={() => handleSelectOption(currentQuestion.id, option.id, currentQuestion.type)}
                           className={`flex items-center p-4 rounded-md border transition-all cursor-pointer ${
                             selected
-                              ? 'border-[#E53935] bg-[#FDE8E7]/35 text-foreground ring-1 ring-[#E53935]/40 shadow-xs'
+                              ? 'border-primary bg-accent/35 text-foreground ring-1 ring-primary/40 shadow-xs'
                               : 'border-border bg-card hover:bg-muted/30 text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           <div
                             className={`flex h-5 w-5 items-center justify-center mr-3 border transition-colors ${
                               currentQuestion.type === 'MULTIPLE_CHOICE' ? 'rounded-xs' : 'rounded-full'
-                            } ${selected ? 'border-[#E53935] bg-[#E53935] text-white' : 'border-muted-foreground/40'}`}
+                            } ${selected ? 'border-primary bg-primary text-white' : 'border-muted-foreground/40'}`}
                           >
                             {selected && (
                               <div
@@ -452,7 +461,7 @@ export default function QuizPlayerPage({
                     })}
                   </CardContent>
 
-                  <CardFooter className="flex items-center justify-between border-t border-border p-6 bg-[#FFFDF8]">
+                  <CardFooter className="flex items-center justify-between border-t border-border p-6 bg-background">
                     <Button
                       variant="outline"
                       size="sm"
@@ -469,7 +478,7 @@ export default function QuizPlayerPage({
                         <Button
                           size="sm"
                           onClick={() => setCurrentQuestionIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
-                          className="space-x-1 rounded-md bg-[#111111] text-white hover:bg-black font-semibold"
+                          className="space-x-1 rounded-md bg-solid text-solid-foreground hover:bg-solid-hover font-semibold"
                         >
                           <span>Next</span>
                           <ArrowRight className="h-4 w-4" />
@@ -478,10 +487,10 @@ export default function QuizPlayerPage({
                         <Button
                           size="sm"
                           onClick={() => setShowConfirmSubmit(true)}
-                          className="space-x-1 bg-[#111111] hover:bg-black text-white rounded-md font-semibold"
+                          className="space-x-1 bg-solid hover:bg-solid-hover text-solid-foreground rounded-md font-semibold"
                         >
                           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                          <span>Finish & Submit</span>
+                          <span>Submit</span>
                         </Button>
                       )}
                     </div>
@@ -506,8 +515,8 @@ export default function QuizPlayerPage({
               {showConfirmSubmit && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
                   <Card className="max-w-md w-full border-border shadow-2xl rounded-lg overflow-hidden animate-in fade-in-50 zoom-in-95 bg-card">
-                    <CardHeader className="bg-[#FFFDF8] border-b border-border">
-                      <CardTitle className="text-lg font-bold font-display">Submit Quiz Attempt?</CardTitle>
+                    <CardHeader className="bg-background border-b border-border">
+                      <CardTitle className="text-lg font-bold font-display">Submit your answers?</CardTitle>
                       <CardDescription className="text-xs leading-relaxed text-muted-foreground">
                         You have answered {answeredCount} of {totalQuestions} questions. Once submitted, your score will be calculated and answers evaluated.
                       </CardDescription>
@@ -525,7 +534,7 @@ export default function QuizPlayerPage({
                         size="sm"
                         disabled={isSubmitting}
                         onClick={() => handleSubmitQuiz(false)}
-                        className="bg-[#111111] hover:bg-black text-white rounded-md font-bold"
+                        className="bg-solid hover:bg-solid-hover text-solid-foreground rounded-md font-bold"
                       >
                         {isSubmitting ? 'Evaluating...' : 'Confirm Submission'}
                       </Button>
@@ -541,7 +550,6 @@ export default function QuizPlayerPage({
       <QuizHintPanel
         isOpen={aiTutorOpen}
         onClose={() => setAiTutorOpen(false)}
-        lessonId={lessonId}
         questionId={currentQuestion?.id}
       />
     </>

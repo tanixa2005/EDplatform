@@ -56,6 +56,17 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
         },
+        // Roles, not colours - each resolves differently per theme.
+        // See the comments beside the tokens in globals.css.
+        solid: {
+          DEFAULT: 'hsl(var(--solid))',
+          hover: 'hsl(var(--solid-hover))',
+          foreground: 'hsl(var(--solid-foreground))'
+        },
+        code: {
+          DEFAULT: 'hsl(var(--code))',
+          foreground: 'hsl(var(--code-foreground))'
+        },
         brand: {
           50: '#FDE8E7',
           100: '#FCD4D2',
@@ -76,7 +87,8 @@ const config: Config = {
           400: '#EAE3D5'
         },
         cream: {
-          DEFAULT: '#FFF3CD',
+          DEFAULT: 'hsl(var(--cream))',
+          foreground: 'hsl(var(--cream-foreground))',
           dark: '#FFE69C'
         },
         ink: {
@@ -88,13 +100,13 @@ const config: Config = {
         // Red is reserved for genuine errors; "not yet" is amber on purpose.
         notyet: {
           DEFAULT: '#E8A33D',
-          soft: '#FDF3E2',
-          ink: '#7A5300'
+          soft: 'hsl(var(--notyet-soft))',
+          ink: 'hsl(var(--notyet-ink))'
         },
         gotit: {
           DEFAULT: '#2E7D52',
-          soft: '#E8F4EC',
-          ink: '#1C5436'
+          soft: 'hsl(var(--gotit-soft))',
+          ink: 'hsl(var(--gotit-ink))'
         }
       },
       borderRadius: {

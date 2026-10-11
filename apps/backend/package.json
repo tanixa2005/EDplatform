@@ -9,7 +9,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "pretest": "node scripts/db-guard.mjs --print",
-    "test": "tsx src/__tests__/verify_phase7_security.ts",
+    "test": "tsx src/__tests__/verify_phase7_security.ts && tsx src/__tests__/verify_ed_voice.ts",
     "pretest:security": "node scripts/db-guard.mjs --print",
     "test:security": "tsx src/__tests__/verify_phase7_security.ts",
     "pretypecheck": "npm run build --workspace=@edplatform/shared && prisma generate",
@@ -21,7 +21,15 @@
     "db:check": "node scripts/db-guard.mjs --print",
     "db:status": "node scripts/db-guard.mjs migrate status",
     "db:deploy": "node scripts/db-guard.mjs migrate deploy",
-    "db:diff": "node scripts/db-guard.mjs migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code"
+    "db:diff": "node scripts/db-guard.mjs migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
+    "test:voice": "tsx src/__tests__/verify_ed_voice.ts",
+    "test:production-seed": "tsx src/__tests__/verify_production_seed.ts",
+    "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
+    "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
+    "predb:seed:lessons": "node scripts/db-guard.mjs --print",
+    "db:seed:lessons": "tsx prisma/seed-curriculum-lessons.ts",
+    "predb:seed:quiz": "node scripts/db-guard.mjs --print",
+    "db:seed:quiz": "tsx prisma/seed-curriculum-quiz.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.7",
@@ -40,12 +48,15 @@
     "express": "^4.21.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
     "prisma": "^5.21.1",
+    "sharp": "^0.35.5",
     "svix": "^2.6.2",
     "typescript": "^5.6.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/multer": "^2.3.0",
     "tsx": "^4.19.2"
   }
 }

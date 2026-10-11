@@ -8,8 +8,52 @@ import {
 import { prisma } from '../config/prisma.config.js';
 import { quizService } from './quiz.service.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../errors/app.error.js';
+import { resolveCurriculumQuizAccess } from './curriculum-access.service.js';
 
 export class QuizAttemptService {
+  /**
+   * Applies the curriculum class gate to one quiz id.
+   *
+   * startAttempt gets this for free through verifyStudentQuizAccess, but the
+   * rest of the attempt lifecycle does not go anywhere near that function:
+   * submit only checked attempt ownership, and the result and listing
+   * endpoints only filtered by userId. Ownership is not a class boundary - it
+   * stops student X reading student Y's attempt, not a Class 7 student working
+   * through a Class 6 quiz they were never allowed to open.
+   *
+   * Legacy quizzes resolve to 'not-curriculum' and are left completely alone.
+   */
+  private async assertCurriculumQuizAccess(quizId: string, user: SafeUser): Promise<void> {
+    const quiz = await prisma.quiz.findUnique({
+      where: { id: quizId },
+      select: {
+        isPublished: true,
+        lesson: {
+          select: {
+            isPublished: true,
+            module: { select: { course: { select: { slug: true, isPublished: true } } } }
+          }
+        },
+        module: { select: { course: { select: { slug: true, isPublished: true } } } }
+      }
+    });
+
+    if (!quiz) throw new NotFoundError('Quiz not found');
+
+    const course = quiz.lesson?.module.course ?? quiz.module?.course;
+    if (!course) throw new NotFoundError('Quiz not found');
+
+    await resolveCurriculumQuizAccess(
+      {
+        courseSlug: course.slug,
+        courseIsPublished: course.isPublished,
+        lessonIsPublished: quiz.lesson ? quiz.lesson.isPublished : null,
+        quizIsPublished: quiz.isPublished
+      },
+      user
+    );
+  }
+
   /**
    * Starts a new attempt or resumes an unexpired IN_PROGRESS attempt.
    */
@@ -109,6 +153,8 @@ export class QuizAttemptService {
    * Retrieves active IN_PROGRESS attempt if available and not expired.
    */
   async getActiveAttempt(quizId: string, user: SafeUser): Promise<QuizAttemptSummaryDto | null> {
+    await this.assertCurriculumQuizAccess(quizId, user);
+
     const existing = await prisma.quizAttempt.findFirst({
       where: {
         quizId,
@@ -199,6 +245,12 @@ export class QuizAttemptService {
     });
 
     if (!attempt) throw new NotFoundError('Quiz attempt not found');
+
+    // Before the ownership check: a Class 7 student probing a Class 6 attempt
+    // id should get the generic curriculum 404, not a 403 that confirms the
+    // attempt is real.
+    await this.assertCurriculumQuizAccess(attempt.quizId, user);
+
     if (attempt.userId !== user.id) {
       throw new ForbiddenError('You cannot submit another user\'s attempt');
     }
@@ -362,6 +414,8 @@ export class QuizAttemptService {
    * Retrieves all attempts by user for a specific quiz.
    */
   async getUserAttempts(quizId: string, user: SafeUser): Promise<QuizAttemptSummaryDto[]> {
+    await this.assertCurriculumQuizAccess(quizId, user);
+
     const attempts = await prisma.quizAttempt.findMany({
       where: {
         quizId,
@@ -425,6 +479,8 @@ export class QuizAttemptService {
     });
 
     if (!attempt) throw new NotFoundError('Quiz attempt not found');
+
+    await this.assertCurriculumQuizAccess(attempt.quizId, user);
 
     const course = attempt.quiz.lesson?.module.course || attempt.quiz.module?.course;
     const isOwner = attempt.userId === user.id;

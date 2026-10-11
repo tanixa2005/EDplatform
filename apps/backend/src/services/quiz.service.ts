@@ -10,6 +10,7 @@ import {
 } from '@edplatform/shared';
 import { prisma } from '../config/prisma.config.js';
 import { NotFoundError, ForbiddenError } from '../errors/app.error.js';
+import { resolveCurriculumQuizAccess } from './curriculum-access.service.js';
 
 export class QuizService {
   /**
@@ -141,6 +142,31 @@ export class QuizService {
         return quiz;
       }
     }
+
+    // Curriculum quizzes are gated by the student's own class, not enrollment.
+    //
+    // This MUST come before the free-preview branch below. Every seeded
+    // curriculum topic carries isFreePreview = true, so that branch alone would
+    // hand a Class 6 quiz to anonymous callers and to Class 7/8 students who
+    // guessed its id - and, through startAttempt, let them sit it too.
+    //
+    // Only this chokepoint needs the call: getQuizById (and therefore
+    // getQuizByLessonId) and startAttempt all route through here.
+    const curriculum = await resolveCurriculumQuizAccess(
+      {
+        courseSlug: course.slug,
+        courseIsPublished: course.isPublished,
+        lessonIsPublished: quiz.lesson ? quiz.lesson.isPublished : null,
+        quizIsPublished: quiz.isPublished
+      },
+      user
+    );
+
+    if (curriculum === 'granted') {
+      return quiz;
+    }
+
+    // Legacy marketplace quizzes keep their original rule exactly.
 
     // Must be published for students
     if (!quiz.isPublished) {

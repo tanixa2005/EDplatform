@@ -4,8 +4,35 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2, PlayCircle, Zap } from 'lucide-react';
-import type { StudentDashboardDto } from '@edplatform/shared';
+import type { StudentDashboardDto, StudentQuizAttemptSummaryDto } from '@edplatform/shared';
+import { useStudent } from '@/context/student-context';
 import { fetchApi } from '@/lib/api';
+
+/**
+ * When the student sat this attempt, short enough to sit on one line.
+ *
+ * Four attempts at the same quiz are otherwise indistinguishable, so the time
+ * matters as much as the date. Rendered only after the client-side fetch
+ * resolves, so there is no server/client locale mismatch to hydrate.
+ */
+function attemptWhen(attempt: StudentQuizAttemptSummaryDto): string {
+  const when = new Date(attempt.submittedAt ?? attempt.startedAt);
+  const day = when.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${day}, ${time}`;
+}
+
+/**
+ * The canonical result page for an attempt, or null when it cannot be built.
+ *
+ * This is the same URL the quiz flow itself redirects to on submit. A legacy
+ * module-level quiz has no lesson, so there is no result route for it and the
+ * row stays unlinked rather than pointing somewhere broken.
+ */
+function resultHref(attempt: StudentQuizAttemptSummaryDto): string | null {
+  if (!attempt.courseSlug || !attempt.lessonId) return null;
+  return `/courses/${attempt.courseSlug}/lessons/${attempt.lessonId}/quiz/results/${attempt.attemptId}`;
+}
 
 /**
  * Practice reuses the existing quiz engine rather than introducing a second one:
@@ -16,16 +43,41 @@ import { fetchApi } from '@/lib/api';
  */
 export default function PracticePage() {
   const router = useRouter();
+  const { isLoaded } = useStudent();
   const [data, setData] = useState<StudentDashboardDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
+  async function load() {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setData(await fetchApi<StudentDashboardDto>('/dashboard/student'));
+    } catch {
+      // A failure is shown, not disguised. Swallowing it was what let the 401
+      // below render as "Nothing yet" - an empty list and a broken request
+      // have to look different to the student.
+      setData(null);
+      setError('Could not load your practice. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Wait for the auth context before fetching.
+  //
+  // React runs child effects before parent effects, so this used to fire
+  // before StudentProvider had registered the Clerk token getter. The request
+  // went out unauthenticated, came back 401, was swallowed by the catch, and
+  // the page told a student with four completed attempts that they had tried
+  // "Nothing yet" - while /me, on the same data, said four quizzes at 85%.
+  // The empty dependency array meant it never retried, so only a soft
+  // navigation ever showed the truth.
   useEffect(() => {
-    fetchApi<StudentDashboardDto>('/dashboard/student')
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setIsLoading(false));
-  }, []);
+    if (!isLoaded) return;
+    void load();
+  }, [isLoaded]);
 
   async function quizMeWithEd() {
     if (isStarting) return;
@@ -43,7 +95,9 @@ export default function PracticePage() {
     }
   }
 
-  if (isLoading) {
+  // Auth still settling counts as loading: an empty state here would claim the
+  // student has never practised.
+  if (!isLoaded || isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -110,7 +164,18 @@ export default function PracticePage() {
       <section className="mt-9">
         <h2 className="text-base font-bold">What you have tried</h2>
 
-        {attempts.length === 0 ? (
+        {error ? (
+          <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+            <p className="text-sm text-destructive">{error}</p>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="ed-tap mt-3 rounded-lg border border-border px-4 text-sm font-semibold transition-colors hover:border-primary/60"
+            >
+              Try again
+            </button>
+          </div>
+        ) : attempts.length === 0 ? (
           <div className="mt-3 rounded-xl border border-dashed border-border bg-secondary/40 p-5 text-center">
             <p className="font-semibold">Nothing yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -119,29 +184,51 @@ export default function PracticePage() {
           </div>
         ) : (
           <ul className="mt-3 space-y-2.5">
-            {attempts.map((attempt) => (
-              <li
-                key={attempt.attemptId}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{attempt.quizTitle}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {attempt.courseTitle}
+            {attempts.map((attempt) => {
+              const href = resultHref(attempt);
+
+              const row = (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{attempt.quizTitle}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {attempt.courseTitle} · {attemptWhen(attempt)}
+                    </span>
                   </span>
-                </span>
-                {/* Amber rather than red: "not yet", never "failed". */}
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-sm font-bold ${
-                    attempt.isPassed
-                      ? 'bg-gotit-soft text-gotit-ink'
-                      : 'bg-notyet-soft text-notyet-ink'
-                  }`}
-                >
-                  {Math.round(attempt.percentage)}%
-                </span>
-              </li>
-            ))}
+                  {/* Amber rather than red: "not yet", never "failed". */}
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-sm font-bold ${
+                      attempt.isPassed
+                        ? 'bg-gotit-soft text-gotit-ink'
+                        : 'bg-notyet-soft text-notyet-ink'
+                    }`}
+                  >
+                    {Math.round(attempt.percentage)}%
+                  </span>
+                  {href && <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                </>
+              );
+
+              return (
+                <li key={attempt.attemptId}>
+                  {href ? (
+                    // The attempt is still ownership-checked on the server; this
+                    // only saves the student from having to find their own way
+                    // back through Learn to see what they got wrong.
+                    <Link
+                      href={href}
+                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 transition-colors hover:border-primary/40"
+                    >
+                      {row}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+                      {row}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

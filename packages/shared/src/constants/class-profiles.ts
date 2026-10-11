@@ -83,6 +83,49 @@ export const CLASS_PROFILES: Record<ClassLevel, ClassProfile> = {
   }
 };
 
+/**
+ * Per-subject teaching guidance. Layered on top of the class profile so a
+ * Class 6 Science question is framed as Science at a Class 6 level, rather than
+ * getting generic treatment.
+ */
+export const SUBJECT_DIRECTIVES: Record<SubjectKey, string> = {
+  MATH:
+    'Mathematics. Work with numbers and steps, not prose. Show the working line by line, and write every fraction, power and equation in LaTeX. Check the student can do the step before moving on.',
+  SCIENCE:
+    'Science. Start from something the student can observe in the real world, then name the idea behind it. Explain why it happens, not just what happens. No formulas unless the concept genuinely needs one.',
+  SOCIAL_SCIENCE:
+    'Social Science. Anchor the answer in people, places and time - who, where, when, and why it mattered. Use a map or timeline description where it helps. Keep it factual and neutral.',
+  ENGLISH:
+    'English. Teach by example: show a correct sentence, then one that is wrong, and let the student spot the difference. Keep rules short and give the student something to write.'
+};
+
+/**
+ * Corrections for specific errors that have actually been observed, per subject.
+ *
+ * Deliberately NOT a place for general teaching advice - SUBJECT_DIRECTIVES
+ * above is that. An entry is added here only when a model has been seen
+ * getting a particular curriculum idea wrong, and it says what the right
+ * mechanism is rather than only forbidding the wrong one: a rule that just
+ * says "don't say X" tends to produce a reply that avoids X and explains
+ * nothing.
+ *
+ * Partial on purpose. Most subjects have no entry, and inventing pitfalls
+ * nobody has observed would just spend prompt budget and invite ED to lecture
+ * about whatever was listed.
+ *
+ * SCIENCE: added after a Class 6 shadow question came back with "a low sun
+ * blocks the light, making a long shadow" - which inverts shadow formation
+ * (the Sun is the light source; the object is what blocks it) on the exact
+ * concept the chapter teaches.
+ */
+export const SUBJECT_ACCURACY_RULES: Partial<Record<SubjectKey, string>> = {
+  SCIENCE: [
+    '- Light and shadows: a shadow appears because an opaque OBJECT blocks light that travels in straight lines. The light source never blocks its own light - so never write that the Sun blocks the light. The object does.',
+    "- Shadow length follows the angle the light arrives at: when the Sun is low, sunlight arrives at a shallow, slanting angle and the object's shadow is stretched out long; when the Sun is higher, the light arrives more steeply from above and the shadow is short. Give that angle as the reason, not just the pattern.",
+    '- The Sun does not travel around the Earth. Its daily path across the sky is apparent motion caused by the Earth spinning on its axis, so write that the Sun "appears to move across the sky" or that the sky changes "as the Earth turns".'
+  ].join('\n')
+};
+
 export const EXPLANATION_STYLE_DIRECTIVES: Record<ExplanationStyle, string> = {
   SIMPLE:
     'This student prefers the simplest possible explanation. Lead with a plain-language summary in one or two short sentences before any detail.',
