@@ -55,6 +55,22 @@ export function isCourseVisibleToClass(
 }
 
 /**
+ * Every Class 6-8 course slug, derived from CLASS_COURSE_SLUGS so the public
+ * catalogue and the per-class gates can never drift apart.
+ *
+ * This is the only list the anonymous public catalogue may show. Legacy and
+ * test courses are not in it, so they stay hidden from logged-out visitors.
+ */
+export const PUBLIC_CATALOG_SLUGS: readonly string[] = Object.freeze(
+  (Object.keys(CLASS_COURSE_SLUGS) as ClassLevel[]).flatMap((level) => CLASS_COURSE_SLUGS[level])
+);
+
+/** True only for a Class 6-8 curriculum slug. Fails closed for anything else. */
+export function isPublicCatalogSlug(slug: string): boolean {
+  return PUBLIC_CATALOG_SLUGS.includes(slug);
+}
+
+/**
  * Keywords used to guess which subject a free-form question belongs to.
  *
  * Deliberately a plain keyword match rather than a model call: it must be

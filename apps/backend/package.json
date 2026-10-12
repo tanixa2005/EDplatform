@@ -25,6 +25,7 @@
     "test:voice": "tsx src/__tests__/verify_ed_voice.ts",
     "test:production-seed": "tsx src/__tests__/verify_production_seed.ts",
     "test:cors": "tsx src/__tests__/verify_cors.ts",
+    "test:public-catalog": "tsx src/__tests__/verify_public_catalog.ts",
     "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
     "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
     "predb:seed:lessons": "node scripts/db-guard.mjs --print",
