@@ -1,20 +1,12 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { isPublicRoute } from './lib/route-access';
 
 /**
- * Routes a signed-out visitor may see. Everything else requires a session.
- *
  * Server-side protection, replacing the old client-side <ProtectedRoute>: a
  * signed-out visitor is redirected before the page renders instead of after a
- * loading spinner resolves.
+ * loading spinner resolves. The public routes are listed in lib/route-access.ts.
  */
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/api/health(.*)'
-]);
-
 const hasClerkKeys = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export default hasClerkKeys
