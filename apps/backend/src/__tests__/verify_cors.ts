@@ -9,6 +9,12 @@
  * Run: npm run test:cors
  */
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { register } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
@@ -28,6 +34,23 @@ const EVIL = 'https://evil.example.com';
 const SIBLING = 'https://attacker-project.vercel.app';
 
 const RESULTS: { test: string; status: 'PASSED' | 'FAILED'; error?: string }[] = [];
+
+// Offline isolation helpers. The hook routes @prisma/client to a stub. The empty folder
+// is where the suite runs, so any dotenv read resolves there and nowhere else.
+const HOOK_URL = new URL('./support/prisma-stub-hook.mjs', import.meta.url).href;
+const BACKEND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ISOLATED_DIR = mkdtempSync(path.join(tmpdir(), 'edp-cors-isolated-'));
+const ENV_READS: string[] = [];
+
+/** Records every read of a path ending in .env, from this process, from now on. */
+function installEnvReadRecorder(): void {
+  const mutable = fs as unknown as { readFileSync: (...args: unknown[]) => unknown };
+  const original = mutable.readFileSync;
+  mutable.readFileSync = function (file: unknown, ...rest: unknown[]) {
+    if (typeof file === 'string' && /\.env$/.test(file)) ENV_READS.push(file);
+    return original.call(this, file, ...rest);
+  };
+}
 
 async function check(test: string, fn: () => void | Promise<void>): Promise<void> {
   try {
@@ -240,6 +263,12 @@ async function runAll(): Promise<void> {
   // The environment is set before the application is imported, because its
   // configuration is read once, at import. The allowlist here is what the
   // server would read from Render.
+  // Offline isolation. The Prisma import resolves to the offline stub, so the generated
+  // client (and the .env file it reads) is never loaded, and the working directory is an
+  // empty folder, so the environment module's own dotenv read finds nothing in the checkout.
+  register(HOOK_URL);
+  installEnvReadRecorder();
+  process.chdir(ISOLATED_DIR);
   process.env.CORS_ORIGIN = `${PROD},${PREVIEW}`;
   const { createApp } = await import('../app.js');
 
@@ -292,6 +321,14 @@ async function runAll(): Promise<void> {
 
   if (appServer) await (appServer as { close: () => Promise<void> }).close();
 
+  await check('The offline isolation held: the stub was used and no environment file outside the empty folder was read', () => {
+    assert.equal((globalThis as { __EDP_PRISMA_STUB_LOADED__?: boolean }).__EDP_PRISMA_STUB_LOADED__, true, 'the stub was not used');
+    for (const read of ENV_READS) {
+      assert.ok(path.resolve(read).startsWith(path.resolve(ISOLATED_DIR) + path.sep), 'an environment file outside the empty folder was read');
+      assert.ok(path.resolve(read) !== path.resolve(BACKEND, '.env'), 'the backend environment file was read');
+    }
+  });
+
   console.log('\n====================================================');
   console.log('📊 CORS RESULTS');
   console.log('====================================================');
@@ -302,6 +339,9 @@ async function runAll(): Promise<void> {
   console.log(`Failed: ${failed}`);
   console.log('====================================================\n');
   if (failed > 0) process.exit(1);
+  // Windows cannot remove the working directory, so leave it before removing the folder.
+  process.chdir(BACKEND);
+  rmSync(ISOLATED_DIR, { recursive: true, force: true });
   // Nothing else is open, so the process ends on its own.
   process.exit(0);
 }

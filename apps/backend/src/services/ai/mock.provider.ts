@@ -48,6 +48,8 @@ const SUBJECT_LABEL: Record<string, string> = {
  * a child. Read at call time, so it follows the environment as it is.
  */
 function offlineNote(): string {
+  // The demo says it is offline, neutrally. It never mentions API keys.
+  if (env.OFFLINE_DEMO_AI) return '_(Offline demo response.)_';
   if (env.NODE_ENV !== 'development') return '';
   return '_(Offline dev response. Set `OPENROUTER_API_KEY` for real tutoring.)_';
 }

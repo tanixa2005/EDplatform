@@ -31,6 +31,11 @@ export const primaryProvider: IAITutorProvider = (() => {
       env.OPENROUTER_VISION_MODEL
     );
   }
+  if (env.OFFLINE_DEMO_AI) {
+    // Explicit and opt-in. Logged as a demo so it is never mistaken for live tutoring.
+    console.log('🤖 AI provider: OFFLINE DEMO (Mock; no AI requests are made)');
+    return mockProvider;
+  }
   console.log('🤖 AI provider: Mock (OPENROUTER_API_KEY not set)');
   return mockProvider;
 })();
