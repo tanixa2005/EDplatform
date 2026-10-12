@@ -3,6 +3,13 @@ import type { SafeUser } from '@edplatform/shared';
 import { prisma } from '../config/prisma.config.js';
 import { env, isClerkEnabled } from '../config/env.config.js';
 import { UnauthorizedError } from '../errors/app.error.js';
+import {
+  linkOrCreateStudentCore,
+  resolveClerkUserCore,
+  type ClerkUserSnapshot,
+  type IdentityDb,
+  type LinkOrCreateStudentInput
+} from './clerk-identity-core.js';
 
 const clerkClient = isClerkEnabled
   ? createClerkClient({ secretKey: env.CLERK_SECRET_KEY })
@@ -32,32 +39,34 @@ export async function verifyClerkSessionToken(token: string): Promise<VerifiedCl
   }
 }
 
-function toSafeUser(user: {
-  id: string;
-  email: string;
-  clerkUserId: string | null;
-  firstName: string;
-  lastName: string;
-  avatarUrl: string | null;
-  bio: string | null;
-  role: SafeUser['role'];
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}): SafeUser {
-  return {
-    id: user.id,
-    email: user.email,
-    clerkUserId: user.clerkUserId,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    avatarUrl: user.avatarUrl,
-    bio: user.bio,
-    role: user.role,
-    isActive: user.isActive,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt
-  };
+/**
+ * The Prisma and Clerk adapters. The rules live in clerk-identity-core.ts, which
+ * is tested offline with in-memory fakes.
+ */
+const identityDb: IdentityDb = {
+  findByClerkUserId: (clerkUserId) => prisma.user.findUnique({ where: { clerkUserId } }),
+  findByEmail: (email) => prisma.user.findUnique({ where: { email } }),
+  // Compare-and-set: the row is updated only while it has no Clerk id.
+  linkClerkUser: async (id, data) => {
+    const { count } = await prisma.user.updateMany({ where: { id, clerkUserId: null }, data });
+    return count === 1 ? prisma.user.findUnique({ where: { id } }) : null;
+  },
+  createStudent: async (data) => {
+    try {
+      return await prisma.user.create({ data: { ...data, role: 'STUDENT' } });
+    } catch (err) {
+      // P2002 is a unique-constraint refusal: another request won the race.
+      if ((err as { code?: string }).code === 'P2002') return null;
+      throw err;
+    }
+  }
+};
+
+function fetchFromClerk(clerkUserId: string): Promise<ClerkUserSnapshot> {
+  if (!clerkClient) {
+    throw new UnauthorizedError('Authentication is not configured on this server.');
+  }
+  return clerkClient.users.getUser(clerkUserId);
 }
 
 /**
@@ -67,89 +76,17 @@ function toSafeUser(user: {
  * The `user.created` webhook normally creates the row, but webhooks can lag by a
  * few seconds and a student must never hit an error on their very first request.
  * This is the lazy fallback: look up by Clerk id, else link an existing account
- * with a matching email, else create a fresh student.
+ * with a matching, verified email, else create a fresh student.
  */
 export async function resolveClerkUser(clerkUserId: string): Promise<SafeUser> {
-  const existing = await prisma.user.findUnique({ where: { clerkUserId } });
-
-  if (existing) {
-    if (!existing.isActive) {
-      throw new UnauthorizedError('This account has been deactivated.');
-    }
-    return toSafeUser(existing);
-  }
-
-  if (!clerkClient) {
-    throw new UnauthorizedError('Authentication is not configured on this server.');
-  }
-
-  const clerkUser = await clerkClient.users.getUser(clerkUserId);
-
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress ??
-    null;
-
-  if (!email) {
-    throw new UnauthorizedError('Your Clerk account has no email address on file.');
-  }
-
-  const linked = await linkOrCreateStudent({
-    clerkUserId,
-    email,
-    firstName: clerkUser.firstName ?? '',
-    lastName: clerkUser.lastName ?? '',
-    avatarUrl: clerkUser.imageUrl ?? null
-  });
-
-  return toSafeUser(linked);
+  return resolveClerkUserCore(identityDb, fetchFromClerk, clerkUserId);
 }
 
-export interface LinkOrCreateStudentInput {
-  clerkUserId: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  avatarUrl?: string | null;
-}
+export type { LinkOrCreateStudentInput };
 
-/**
- * Links a Clerk identity onto an existing local account with the same email, or
- * creates a new student. Shared by the lazy fallback above and the Clerk webhook.
- */
+/** Attaches a Clerk identity to an account, or creates one. Used by the webhook. */
 export async function linkOrCreateStudent(input: LinkOrCreateStudentInput) {
-  const normalizedEmail = input.email.toLowerCase().trim();
-  // Clerk requires a name at sign-up, but social providers can omit it.
-  const firstName = input.firstName.trim() || normalizedEmail.split('@')[0] || 'Student';
-  const lastName = input.lastName.trim() || '';
-
-  const byEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-
-  if (byEmail) {
-    return prisma.user.update({
-      where: { id: byEmail.id },
-      data: {
-        clerkUserId: input.clerkUserId,
-        // Only backfill names that are missing; never overwrite what the student set.
-        firstName: byEmail.firstName || firstName,
-        lastName: byEmail.lastName || lastName,
-        avatarUrl: byEmail.avatarUrl ?? input.avatarUrl ?? null,
-        // Every Clerk-provisioned account is a student. EDplatform has no other role.
-        role: 'STUDENT'
-      }
-    });
-  }
-
-  return prisma.user.create({
-    data: {
-      clerkUserId: input.clerkUserId,
-      email: normalizedEmail,
-      firstName,
-      lastName,
-      avatarUrl: input.avatarUrl ?? null,
-      role: 'STUDENT'
-    }
-  });
+  return linkOrCreateStudentCore(identityDb, input);
 }
 
 /**

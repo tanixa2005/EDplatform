@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 import { parseAllowedOrigins } from './cors-origins.js';
+import { offlineDemoProblems } from './offline-demo.js';
 
 // Load .env file
 dotenv.config();
@@ -72,15 +73,28 @@ export const envSchema = z
     // the migration; requests then fall back to the legacy JWT cookie.
     CLERK_SECRET_KEY: z.string().optional().default(''),
     CLERK_PUBLISHABLE_KEY: z.string().optional().default(''),
-    CLERK_WEBHOOK_SECRET: z.string().optional().default('')
+    CLERK_WEBHOOK_SECRET: z.string().optional().default(''),
+    // Off unless set to exactly 'true' (blank counts as off). Runs the offline Mock tutor in production
+    // mode for the isolated demo backend. Its rules live in offline-demo.ts.
+    OFFLINE_DEMO_AI: z.enum(['true', 'false', '']).default('false').transform((val) => val === 'true'),
+    OFFLINE_DEMO_EXPECT_ENDPOINT: z.string().optional().default('')
   })
   .superRefine((data, ctx) => {
+    if (data.OFFLINE_DEMO_AI) {
+      // Fails closed: every problem refuses startup, and no message contains a value.
+      for (const message of offlineDemoProblems(data)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['OFFLINE_DEMO_AI'], message });
+      }
+    }
+
     if (data.NODE_ENV === 'production') {
       // Without a key the factory would select the Mock, which answers with
       // canned replies and no sign that the AI is off. In production that is a
       // silent failure, so startup refuses instead. The message names the
       // variable and never the value.
-      if (data.OPENROUTER_API_KEY.trim() === '') {
+      // The offline demo is the one explicit exception, and it is only accepted by
+      // offlineDemoProblems above, which refuses any key and any other database.
+      if (data.OPENROUTER_API_KEY.trim() === '' && !data.OFFLINE_DEMO_AI) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['OPENROUTER_API_KEY'],

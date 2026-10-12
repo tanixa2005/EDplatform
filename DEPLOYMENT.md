@@ -277,3 +277,71 @@ The backend provides a lightweight, unauthenticated health-check endpoint for lo
     }
   }
   ```
+
+
+---
+
+## Demo curriculum bootstrap (safe run)
+
+This creates the approved Class 6-8 curriculum in a **new, empty** demo database. It reads only the repository's committed files, and it never reads data from any existing database. It is separate from the development seeds and the production curriculum runner, and neither of those is changed.
+
+### Why a clean clone is required
+
+The database client loads `apps/backend/.env` as soon as it is imported, and that file holds the development database address. The bootstrap therefore checks, before it imports the database client, whether a `.env` file exists in the repository root or the backend folder. If one does, it prints a short explanation and exits. It never opens or reads the file.
+
+Run it from a **fresh clone**, because `.env` files are git-ignored and a clone does not contain them:
+
+```bash
+git clone <repository-url> edplatform-demo
+cd edplatform-demo
+git checkout release/edplatform-submission
+npm install
+```
+
+Do not copy your own `.env` files into the clone. The check does not move, rename or delete any file, so your existing `.env` files are left as they are.
+
+### Set the variables for the current shell only
+
+Never put these in a file. The database address comes from the new Neon project's **direct** connection (Connection Details, not the pooled one).
+
+```bash
+export EDP_DEMO_DATABASE_URL='<direct connection string of the demo project>'
+export EDP_DEMO_EXPECT_ENDPOINT='<the demo project endpoint id, for example ep-cool-darkness-a1b2c3d4>'
+```
+
+### Run it, in order
+
+1. **Plan (offline, no connection):**
+   ```bash
+   npm run demo:bootstrap --workspace=@edplatform/backend -- --plan
+   ```
+2. **Preflight (reads only):** checks that all seven migrations are finished and the database is empty. Writes nothing.
+   ```bash
+   EDP_ALLOW_DEMO_SEED=1 npm run demo:bootstrap --workspace=@edplatform/backend -- --preflight --confirm-demo-seed
+   ```
+3. **Apply (writes), only after reviewing the preflight output:**
+   ```bash
+   EDP_ALLOW_DEMO_SEED=1 npm run demo:bootstrap --workspace=@edplatform/backend -- --confirm-demo-seed
+   ```
+
+The migrations must already be applied to the demo database before step 2 will pass. Apply them through the demo service's own build (its `DATABASE_URL` points at the demo database), not through the development database guard.
+
+### If the run is refused
+
+- **"An environment file exists in: ..."**: you are in a checkout that has a `.env` file. Run from a fresh clone instead. Do not delete your own files to get around this.
+- **"could not be verified"**: the folder layout is not the repository's. Run from a fresh clone.
+- Any other refusal names the rule that failed. None of the messages print a URL, password or key.
+
+### What the runner refuses, in every mode that connects
+
+- the production endpoint, the development endpoint, and the backup endpoint, in direct or pooled form
+- any hostname that is not a valid Neon hostname for the approved endpoint
+- a run without both confirmations (`--confirm-demo-seed` and `EDP_ALLOW_DEMO_SEED=1`)
+- a database that holds any row in the application tables
+- a migration history that is incomplete, failed or rolled back
+
+Writes are create-only, inside one transaction. A failure part-way through rolls the whole run back.
+
+### Known limitation
+
+The production curriculum runner and the development seed scripts import the same database client without this check. They are unchanged by this work, so they should also only be run from a clean clone.
