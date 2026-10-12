@@ -22,11 +22,14 @@ export class CourseController {
       // request, so it cannot be spoofed to reveal content for another class.
       const profile = req.user ? await studentProfileService.getProfile(req.user.id) : null;
 
+      // An anonymous visitor (no verified user) gets the public Class 6-8 catalogue.
+      // A signed-in user with no class level gets nothing; see public-catalog.ts.
       const courses = await courseService.getPublishedCourses({
         search: typeof search === 'string' ? search : undefined,
         level: typeof level === 'string' ? level : undefined,
         categoryId: typeof categoryId === 'string' ? categoryId : undefined,
-        classLevel: profile?.classLevel ?? null
+        classLevel: profile?.classLevel ?? null,
+        anonymous: !req.user
       });
       res.status(200).json({ success: true, data: { courses } });
     } catch (error) {

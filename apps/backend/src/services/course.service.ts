@@ -7,6 +7,12 @@ import {
 } from '@edplatform/shared';
 import { isCourseVisibleToClass, type ClassLevel } from '@edplatform/shared';
 import { prisma } from '../config/prisma.config.js';
+import {
+  catalogScope,
+  selectCatalogCourses,
+  toPublicCard,
+  type CatalogCard
+} from './public-catalog.js';
 import { NotFoundError, ForbiddenError, ConflictError } from '../errors/app.error.js';
 import { slugify } from '../utils/slug.util.js';
 
@@ -102,65 +108,44 @@ export class CourseService {
    * allowlist rather than a database column: course rows carry no class level,
    * and legacy software-engineering courses must never reach a Class 6 student.
    *
-   * No class level means no results. For a product used by children, failing
-   * closed is the right default.
+   * A signed-in user with no class level sees no results. An anonymous visitor
+   * (`anonymous: true`) sees only the Class 6-8 curriculum courses. Both rules
+   * live in public-catalog.ts, which also enforces isPublished on every row.
    */
   async getPublishedCourses(query?: {
     search?: string;
     level?: string;
     categoryId?: string;
     classLevel?: ClassLevel | null;
-  }): Promise<CourseCardDto[]> {
-    if (!query?.classLevel) {
-      return [];
-    }
+    anonymous?: boolean;
+  }): Promise<CatalogCard[]> {
+    const catalogInput = { classLevel: query?.classLevel, anonymous: query?.anonymous === true };
+    const scope = catalogScope(catalogInput);
 
-    const whereClause: Record<string, unknown> = {
-      isPublished: true
-    };
-
-    if (query?.level) {
-      const normalizedLevel = query.level.trim().toUpperCase();
-      if (['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(normalizedLevel)) {
-        whereClause.level = normalizedLevel;
-      }
-    }
-
-    if (query?.categoryId) {
-      whereClause.categoryId = query.categoryId;
-    }
-
-    if (query?.search) {
-      whereClause.OR = [
-        { title: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
-        { shortSummary: { contains: query.search, mode: 'insensitive' } }
-      ];
-    }
-
-    const allCourses = await prisma.course.findMany({
-      where: whereClause,
-      include: {
-        instructor: {
-          select: { id: true, firstName: true, lastName: true, avatarUrl: true }
-        },
-        category: true,
-        modules: {
+    const courses = await selectCatalogCourses(
+      catalogInput,
+      { search: query?.search, level: query?.level, categoryId: query?.categoryId },
+      (where) =>
+        prisma.course.findMany({
+          where,
           include: {
-            lessons: {
-              where: { isPublished: true }
+            instructor: {
+              select: { id: true, firstName: true, lastName: true, avatarUrl: true }
+            },
+            category: true,
+            modules: {
+              include: {
+                lessons: {
+                  where: { isPublished: true }
+                }
+              }
             }
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const courses = allCourses.filter((course) =>
-      isCourseVisibleToClass(course.slug, query.classLevel)
+          },
+          orderBy: { createdAt: 'desc' }
+        })
     );
 
-    return courses.map((course) => ({
+    const cards: CourseCardDto[] = courses.map((course) => ({
       id: course.id,
       title: course.title,
       slug: course.slug,
@@ -179,6 +164,9 @@ export class CourseService {
       createdAt: course.createdAt,
       updatedAt: course.updatedAt
     }));
+
+    // Anonymous visitors get the public card only; signed-in responses are unchanged.
+    return scope.kind === 'public' ? cards.map(toPublicCard) : cards;
   }
 
   /**

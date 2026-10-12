@@ -26,6 +26,7 @@
     "test:production-seed": "tsx src/__tests__/verify_production_seed.ts",
     "test:cors": "tsx src/__tests__/verify_cors.ts",
     "test:offline-demo": "tsx src/__tests__/verify_offline_demo.ts",
+    "test:public-catalog": "tsx src/__tests__/verify_public_catalog.ts",
     "test:demo-bootstrap": "tsx src/__tests__/verify_demo_bootstrap.ts",
     "demo:bootstrap": "tsx src/tools/demo-curriculum/cli.ts",
     "test:account-linking": "tsx src/__tests__/verify_account_linking.ts",
