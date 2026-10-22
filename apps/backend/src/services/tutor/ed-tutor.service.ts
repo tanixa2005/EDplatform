@@ -16,8 +16,30 @@ import {
   buildTutorSystemPrompt,
   detectImplicitAction
 } from './prompt-builder.service.js';
+import { lessonFallbackReply, lessonIntroduction } from './lesson-fallback.js';
 import { resolveSessionCurriculum } from './session-curriculum.service.js';
 import { tutorSessionService } from './tutor-session.service.js';
+
+/**
+ * The outage reply for a lesson session, or null when its stored text must not
+ * or cannot be shown.
+ *
+ * Never while the student has a quiz in progress on this lesson or its
+ * chapter: a lesson's opening can contain exactly the fact a question tests,
+ * and an outage must not become a way to look answers up mid-quiz. That check
+ * comes first, and if it cannot be made the lesson text is not shown.
+ */
+async function lessonFallbackFor(userId: string, lessonId: string): Promise<string | null> {
+  try {
+    if (await tutorSessionService.hasQuizInProgressForLesson(userId, lessonId)) return null;
+    const source = await tutorSessionService.getLessonFallbackSource(lessonId);
+    const introduction = lessonIntroduction(source?.content);
+    return source && introduction ? lessonFallbackReply(source.title, introduction) : null;
+  } catch {
+    // A database hiccup here must not replace the honest outage message.
+    return null;
+  }
+}
 
 export interface TutorTurnResult {
   /** The student turn that was persisted before streaming started. */
@@ -148,7 +170,7 @@ export class EdTutorService {
     // The client supplied at most a lessonId at session creation, and the
     // chapter anchor it cannot supply at all; neither can name the chapter,
     // the book, the course or the topic.
-    const { curriculum } = resolveSessionCurriculum(session);
+    const { curriculum, source: curriculumSource } = resolveSessionCurriculum(session);
 
     const systemPrompt = buildTutorSystemPrompt({
       // The session snapshot wins: a student who moves up a class should not have
@@ -201,7 +223,24 @@ export class EdTutorService {
           'AI_VISION_UNAVAILABLE'
         );
       }
-      throw err;
+
+      // Every AI route failed before the student saw anything. In a session
+      // about one lesson, show the lesson's own opening instead of a bare
+      // error - verbatim stored text, labelled as such, never generated.
+      // Anything else (a free chat, a partial reply, a lesson with no
+      // suitable text, a quiz in progress) keeps the ordinary unavailable
+      // message.
+      const outage =
+        err instanceof ServiceUnavailableError && err.code === 'AI_PROVIDER_UNAVAILABLE';
+      const fallback =
+        outage && !hasImage && reply === '' && curriculumSource === 'topic' && session.lessonId
+          ? await lessonFallbackFor(user.id, session.lessonId)
+          : null;
+      if (!fallback) throw err;
+
+      console.error('[AI] all AI routes failed; served the lesson introduction instead');
+      reply = fallback;
+      await onChunk(fallback);
     }
 
     const edMessage = await tutorSessionService.appendEdMessage(

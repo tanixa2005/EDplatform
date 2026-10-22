@@ -3,6 +3,7 @@ import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
 import { MockAITutorProvider } from './mock.provider.js';
 import { failureCategory, providerFailureDiagnostic } from './failure-diagnostics.js';
+import { FREE_FALLBACK_MODEL, createFreeModelGate, isAllowlistedFreeModel } from './free-model-guard.js';
 import type { OpenRouterFailureDetails } from './openrouter-failure.js';
 import { OpenRouterAITutorProvider } from './openrouter.provider.js';
 
@@ -43,6 +44,35 @@ export const primaryProvider: IAITutorProvider = (() => {
 
 /** True when this process has no real provider at all - local dev with no key. */
 export const isOfflineProvider = primaryProvider.name === mockProvider.name;
+
+/**
+ * The free fallback route, used only when the primary fails in a way another
+ * upstream could avoid. See free-model-guard.ts for why it is this model and
+ * how "free" is enforced.
+ *
+ * Built only when a real key is configured AND the model is on the reviewed
+ * allowlist, with the same key and the zero-price cap on every request. The
+ * allowlist is currently empty, so this is null in every environment and the
+ * retry loop never leaves the primary. The Mock and the offline demo never
+ * get one either.
+ * A mutable holder rather than two constants so the offline tests can put a
+ * scripted route in its place; nothing in production reassigns it.
+ */
+export const aiFallback: {
+  provider: IAITutorProvider | null;
+  gate: ReturnType<typeof createFreeModelGate>;
+} = {
+  provider:
+    !isOfflineProvider && isAllowlistedFreeModel(FREE_FALLBACK_MODEL)
+      ? new OpenRouterAITutorProvider(env.OPENROUTER_API_KEY, FREE_FALLBACK_MODEL, FREE_FALLBACK_MODEL, {
+          zeroPriceCap: true
+        })
+      : null,
+  gate: createFreeModelGate(FREE_FALLBACK_MODEL)
+};
+if (aiFallback.provider) {
+  console.log(`🤖 AI fallback: ${FREE_FALLBACK_MODEL} (free only, verified before use)`);
+}
 
 /**
  * Retry policy, in one place rather than scattered through the call sites.
@@ -292,6 +322,31 @@ export function shouldRetryProviderCall(state: {
   return { retry: true, reason: 'transient' };
 }
 
+/**
+ * Whether a failed primary attempt should move to the free fallback.
+ *
+ * Only for a failure another upstream could avoid: a non-daily 429, a 5xx, a
+ * timeout, a dropped connection or an empty stream - exactly the errors
+ * `isTransientProviderError` calls transient. Never for a permanent error (a
+ * bad key fails the same way on any model; a malformed request likewise), and
+ * never for a daily or long-lived quota: those are classified permanent from
+ * the actual response, not assumed to be shared or separate.
+ *
+ * Never once anything has reached the student either - the fallback would
+ * start the answer again and the student would read it twice. And never when
+ * the attempt or time budget is already spent.
+ */
+export function shouldSwitchToFallback(state: {
+  transient: boolean;
+  emittedAnything: boolean;
+  attempt: number;
+  elapsedMs: number;
+}): boolean {
+  if (!state.transient || state.emittedAnything) return false;
+  if (state.attempt >= AI_RETRY.maxAttempts) return false;
+  return state.elapsedMs < AI_RETRY.totalBudgetMs;
+}
+
 /** A provider that finished without saying anything. Transient: worth one more go. */
 function emptyStreamError(): Error {
   const err = new Error('The provider completed the stream without returning any text');
@@ -324,10 +379,20 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
 
   let lastError: unknown = null;
   const startedAt = Date.now();
+  const needsImages = Boolean(params.images && params.images.length > 0);
 
+  // Which route this attempt uses. It starts on the primary and moves to the
+  // fallback at most once; it never moves back.
+  let provider: IAITutorProvider = primaryProvider;
+  let onFallback = false;
+
+  // The attempt count is shared across both routes, so a turn never makes
+  // more than AI_RETRY.maxAttempts upstream requests in total - the same
+  // ceiling as before the fallback existed. Every one of them counts against
+  // the account's free daily allowance.
   for (let attempt = 1; attempt <= AI_RETRY.maxAttempts; attempt += 1) {
     try {
-      const text = await primaryProvider.generateStream(guardedParams);
+      const text = await provider.generateStream(guardedParams);
 
       // A 200 that streamed nothing is not a success. It used to be returned
       // as an empty answer: the student watched an empty bubble, and only saw
@@ -335,6 +400,7 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
       // failure, it gets the retry policy and then the honest message.
       if (!emittedAnything) throw emptyStreamError();
 
+      if (onFallback) console.log(`[AI] reply served by free fallback model=${aiFallback.gate.model}`);
       return text;
     } catch (err) {
       lastError = err;
@@ -343,7 +409,7 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
       const status = extractStatus(err);
       const elapsedMs = Date.now() - startedAt;
       const nextDelayMs = retryDelayMs(err, attempt);
-      const { retry, reason } = shouldRetryProviderCall({
+      let { retry, reason } = shouldRetryProviderCall({
         transient,
         emittedAnything,
         attempt,
@@ -351,15 +417,43 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
         nextDelayMs
       });
 
+      // Moving to the fallback is decided first, because it does not wait:
+      // the fallback is a different upstream, so the primary's Retry-After
+      // says nothing about it.
+      let switchTo: IAITutorProvider | null = null;
+      if (
+        !onFallback &&
+        aiFallback.provider &&
+        shouldSwitchToFallback({ transient, emittedAnything, attempt, elapsedMs })
+      ) {
+        const verdict = await aiFallback.gate.check(needsImages);
+        if (verdict.ok) {
+          switchTo = aiFallback.provider;
+          retry = true;
+          reason = 'fallback';
+        } else {
+          // Not verifiably free and compatible: never called. The primary's
+          // own retry decision above stands.
+          console.error(`[AI] free fallback not used (${verdict.reason}); staying on the primary route`);
+        }
+      }
+
+      const model = (err as { model?: unknown } | null)?.model;
       console.error(
-        `[AI] ${primaryProvider.name} attempt ${attempt}/${AI_RETRY.maxAttempts} failed ` +
-          `(status=${status ?? 'none'}, category=${failureCategory(err)}, transient=${transient}, ` +
+        `[AI] ${provider.name} attempt ${attempt}/${AI_RETRY.maxAttempts} failed ` +
+          `(route=${onFallback ? 'fallback' : 'primary'}${typeof model === 'string' ? `, model=${model}` : ''}, ` +
+          `status=${status ?? 'none'}, category=${failureCategory(err)}, transient=${transient}, ` +
           `partial=${emittedAnything}, ` +
           `elapsed=${elapsedMs}ms, retry=${retry}/${reason}` +
-          `${retry ? `, next_in=${nextDelayMs}ms` : ''}): ` +
+          `${switchTo ? `, next=fallback ${aiFallback.gate.model}` : retry ? `, next_in=${nextDelayMs}ms` : ''}): ` +
           errorText(err)
       );
 
+      if (switchTo) {
+        provider = switchTo;
+        onFallback = true;
+        continue;
+      }
       if (!retry) break;
       await sleep(nextDelayMs ?? backoffDelayMs(attempt));
     }
