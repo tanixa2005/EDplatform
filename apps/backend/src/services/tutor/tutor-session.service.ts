@@ -22,6 +22,11 @@ import { deriveSessionTitle } from './prompt-builder.service.js';
 /** How many prior turns are replayed to the model. Bounds tokens per request. */
 export const TUTOR_HISTORY_TURNS = 12;
 
+/** A non-blank string id. Anything else cannot be checked, so it is not trusted. */
+function isUsableId(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
 /**
  * The quiz attempts that count as "in progress on this lesson", as a query.
  * Kept pure and exported so the exact rule is tested without a database.
@@ -316,19 +321,34 @@ export class TutorSessionService {
    * chapter, or containing a question about this lesson. A timed attempt that
    * has run out but was never closed still counts - it is only marked expired
    * when the student next opens the quiz - which errs towards not showing the
-   * text. An unknown lesson counts as in progress for the same reason.
+   * text.
+   *
+   * Fails closed: anything that prevents a definite "no" counts as in
+   * progress. That covers a blank user or lesson id, a lesson that does not
+   * exist, a lesson whose chapter is missing or does not match its own
+   * moduleId, a database error, and a query result that is not plainly
+   * "no attempt". Only a clean, complete read that finds no attempt allows
+   * lesson text.
    */
   public async hasQuizInProgressForLesson(userId: string, lessonId: string): Promise<boolean> {
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: lessonId },
-      select: { moduleId: true }
-    });
-    if (!lesson) return true;
-    const attempt = await prisma.quizAttempt.findFirst({
-      where: quizInProgressWhere(userId, lessonId, lesson.moduleId),
-      select: { id: true }
-    });
-    return attempt !== null;
+    if (!isUsableId(userId) || !isUsableId(lessonId)) return true;
+    try {
+      const lesson = await prisma.lesson.findUnique({
+        where: { id: lessonId },
+        select: { moduleId: true, module: { select: { id: true } } }
+      });
+      const moduleId = lesson?.moduleId;
+      if (!lesson || !isUsableId(moduleId) || !lesson.module || lesson.module.id !== moduleId) {
+        return true;
+      }
+      const attempt = await prisma.quizAttempt.findFirst({
+        where: quizInProgressWhere(userId, lessonId, moduleId),
+        select: { id: true }
+      });
+      return attempt !== null;
+    } catch {
+      return true;
+    }
   }
 
   /**

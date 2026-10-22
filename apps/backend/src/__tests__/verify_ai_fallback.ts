@@ -4,9 +4,10 @@
  *
  * Offline throughout. fetch is replaced with a script before any provider
  * call, so no request leaves this process - neither to the chat endpoint nor
- * to the model catalogue. '@prisma/client' resolves to a stub that throws on
- * use, so no database can be reached; the tutor service's own reads are
- * replaced with in-memory fakes. The key is fake. No environment file is read.
+ * to the model catalogue. '@prisma/client' resolves to an in-memory fixture
+ * stub that throws on any model a test has not provided, so no database can
+ * be reached; the tutor service's own reads are replaced with in-memory fakes.
+ * The key is fake. No environment file is read.
  *
  * Run: npm run test:ai-fallback
  */
@@ -38,7 +39,9 @@ const CATALOGUE_URL = `https://openrouter.ai/api/v1/models/${INKLING}/endpoints`
 const TEST_KEY = 'sk-or-v1-FALLBACKTESTKEY00000000000000000000000000000000000000000000';
 const STUDENT_MARKER = 'STUDENT-CANARY-5d1e what is a noun, I am Ravi from Pune';
 
-const HOOK_URL = new URL('./support/prisma-stub-hook.mjs', import.meta.url).href;
+const HOOK_URL = new URL('./support/prisma-fixture-hook.mjs', import.meta.url).href;
+/** The fixture the Prisma stub serves. Empty means every database call throws. */
+const prismaFixture = globalThis as unknown as { __EDP_PRISMA_FIXTURE__?: Record<string, unknown> };
 
 // ------------------------------------------------------------ scripted network
 
@@ -170,6 +173,7 @@ const catalogueReads = (requests: Recorded[]) => requests.filter((r) => r.url ==
 async function runAll(): Promise<void> {
   // Isolation, before anything from the application is imported.
   register(HOOK_URL);
+  prismaFixture.__EDP_PRISMA_FIXTURE__ = {};
   const isolated = mkdtempSync(path.join(tmpdir(), 'edp-ai-fallback-'));
   const backendDir = process.cwd();
   process.chdir(isolated);
@@ -813,6 +817,134 @@ async function runAll(): Promise<void> {
     );
     assert.ok(method.length > 0, 'the method was not found');
     assert.ok(!/\.(create|update|upsert|delete|deleteMany|updateMany|createMany)\(/.test(method));
+  });
+
+  // -------------------------------------------------------------------------
+  console.log('\n[12] The quiz-in-progress check itself fails closed (real method, in-memory database)');
+
+  const findFirstCalls: unknown[] = [];
+  let lessonReads = 0;
+  /**
+   * Serves one lesson row (or an error) and one attempt result (or an error)
+   * to the real method. No default for attemptRow: a default would silently
+   * turn `undefined` into `null`.
+   */
+  const useQuizFixture = (lessonRow: unknown | Error, attemptRow?: unknown | Error) => {
+    findFirstCalls.length = 0;
+    lessonReads = 0;
+    prismaFixture.__EDP_PRISMA_FIXTURE__ = {
+      lesson: {
+        findUnique: async () => {
+          lessonReads += 1;
+          if (lessonRow instanceof Error) throw lessonRow;
+          return lessonRow;
+        }
+      },
+      quizAttempt: {
+        findFirst: async (args: unknown) => {
+          findFirstCalls.push(args);
+          if (attemptRow instanceof Error) throw attemptRow;
+          return attemptRow;
+        }
+      }
+    };
+  };
+  const goodLesson = { moduleId: 'module-1', module: { id: 'module-1' } };
+  const check12 = (userId: string, lessonId: string) => realHasQuizInProgress.call(tutorSessionService, userId, lessonId);
+
+  await check('A complete lesson with no attempt in progress is the only case that allows lesson text', async () => {
+    useQuizFixture(goodLesson, null);
+    assert.equal(await check12('user-1', 'lesson-1'), false);
+    assert.equal(findFirstCalls.length, 1);
+    assert.deepEqual(
+      (findFirstCalls[0] as { where: unknown }).where,
+      quizInProgressWhere('user-1', 'lesson-1', 'module-1')
+    );
+  });
+
+  await check('An attempt in progress blocks lesson text', async () => {
+    useQuizFixture(goodLesson, { id: 'attempt-1' });
+    assert.equal(await check12('user-1', 'lesson-1'), true);
+  });
+
+  for (const [label, row] of [
+    ['a lesson that does not exist', null],
+    ['a lesson with no moduleId', { moduleId: null, module: { id: 'module-1' } }],
+    ['a lesson with a blank moduleId', { moduleId: '  ', module: { id: '  ' } }],
+    ['a lesson whose chapter row is missing', { moduleId: 'module-1', module: null }],
+    ['a lesson whose chapter does not match its moduleId', { moduleId: 'module-1', module: { id: 'module-2' } }],
+    ['a lesson row with a non-string moduleId', { moduleId: 42, module: { id: 42 } }],
+    ['a lesson row with no fields at all', {}]
+  ] as [string, unknown][]) {
+    await check(`Incomplete data fails closed: ${label}`, async () => {
+      useQuizFixture(row, null);
+      assert.equal(await check12('user-1', 'lesson-1'), true);
+      assert.equal(findFirstCalls.length, 0, 'the attempt query ran on incomplete lesson data');
+    });
+  }
+
+  for (const [label, userId, lessonId] of [
+    ['a blank user id', '', 'lesson-1'],
+    ['a blank lesson id', 'user-1', '   '],
+    ['a missing user id', undefined, 'lesson-1'],
+    ['a missing lesson id', 'user-1', null]
+  ] as [string, string, string][]) {
+    await check(`Invalid input fails closed without touching the database: ${label}`, async () => {
+      // The database would say "no quiz in progress" if asked - so only the
+      // input check itself can produce `true` here.
+      useQuizFixture(goodLesson, null);
+      assert.equal(await check12(userId, lessonId), true);
+      assert.equal(lessonReads, 0, 'the database was queried with an invalid id');
+      assert.equal(findFirstCalls.length, 0);
+    });
+  }
+
+  await check('A database error reading the lesson fails closed', async () => {
+    useQuizFixture(new Error('database unavailable'));
+    assert.equal(await check12('user-1', 'lesson-1'), true);
+  });
+
+  await check('A database error reading quiz attempts fails closed', async () => {
+    useQuizFixture(goodLesson, new Error('database unavailable'));
+    assert.equal(await check12('user-1', 'lesson-1'), true);
+  });
+
+  await check('A query result that is not plainly "no attempt" fails closed', async () => {
+    useQuizFixture(goodLesson, undefined);
+    assert.equal(await check12('user-1', 'lesson-1'), true);
+  });
+
+  await check('End to end: incomplete lesson data in a real turn keeps the unavailable message', async () => {
+    resetRoutes();
+    persisted.length = 0;
+    stubs('lesson-1', { title: LESSON.title, content: LESSON.content }, 'real');
+    useQuizFixture({ moduleId: 'module-1', module: null }, null);
+    const chunks: string[] = [];
+    const out = await withScript(failingRoutes, () =>
+      edTutorService.streamTurn(user, 'session-1', { message: 'hi' } as never, (c) => {
+        chunks.push(c);
+      })
+    );
+    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    assert.equal(chunks.length, 0);
+    assert.equal(sourceReads.length, 0, 'the lesson text was read');
+    prismaFixture.__EDP_PRISMA_FIXTURE__ = {};
+  });
+
+  await check('End to end: a complete lesson with no quiz in progress still gets the lesson opening', async () => {
+    resetRoutes();
+    persisted.length = 0;
+    stubs('lesson-1', { title: LESSON.title, content: LESSON.content }, 'real');
+    useQuizFixture(goodLesson, null);
+    const chunks: string[] = [];
+    const out = await withScript(failingRoutes, () =>
+      edTutorService.streamTurn(user, 'session-1', { message: 'hi' } as never, (c) => {
+        chunks.push(c);
+      })
+    );
+    assert.equal(out.error, null, String(out.error));
+    assert.ok(chunks.join('').includes(lessonFallback.lessonIntroduction(LESSON.content)!));
+    prismaFixture.__EDP_PRISMA_FIXTURE__ = {};
   });
 
   await check('A free chat with both routes down gets the unavailable message, not lesson text', async () => {
