@@ -8,9 +8,9 @@
  *
  * Zero budget is a hard rule, and three things enforce it:
  *
- *   1. An allowlist of exactly one reviewed id, in code. There is no
- *      environment variable for it, so no configuration change can point the
- *      fallback at a paid model.
+ *   1. An allowlist of reviewed ids, in code. There is no environment
+ *      variable for it, so no configuration change can point the fallback at
+ *      a paid model. It is currently EMPTY - see FREE_FALLBACK_ALLOWLIST.
  *   2. This runtime check, made before the fallback is used: OpenRouter's
  *      public catalogue must list the id with EVERY endpoint priced at zero,
  *      text in and text out, and image input for a photo turn. If the
@@ -23,11 +23,24 @@
  * student, and no part of a conversation is ever sent to it.
  */
 
-/** Verified 22 Oct 2026: zero-priced, text+image in, text out, served by Thinking Machines. */
+/**
+ * The candidate that was evaluated: zero-priced, text and image in, text out,
+ * served by Thinking Machines (checked 22 Oct 2026). It is NOT allowlisted.
+ */
 export const FREE_FALLBACK_MODEL = 'thinkingmachines/inkling-small:free';
 
-/** Exactly the ids a fallback may use. Anything else is refused before any request. */
-const FREE_FALLBACK_ALLOWLIST: readonly string[] = [FREE_FALLBACK_MODEL];
+/**
+ * Exactly the ids a fallback may use. Anything else is refused before any
+ * request, including the catalogue read.
+ *
+ * Deliberately EMPTY, so no fallback model can be called. The only candidate's
+ * free tier licenses prompts for training and forbids submitting information
+ * from or about children under 13, and ED's students are in Classes 6-8 (see
+ * docs/ai-provider-terms-review.md). Adding an id here is a reviewed code
+ * change, made only after that provider's terms have been checked for use by
+ * children.
+ */
+export const FREE_FALLBACK_ALLOWLIST: readonly string[] = [];
 
 const CATALOGUE_BASE = 'https://openrouter.ai/api/v1/models/';
 
@@ -54,8 +67,11 @@ export interface FreeModelVerification {
 }
 
 /** Whether an id may be considered at all: allowlisted, ':free', and never a router. */
-export function isAllowlistedFreeModel(id: string): boolean {
-  return FREE_FALLBACK_ALLOWLIST.includes(id) && id.endsWith(':free') && !id.startsWith('openrouter/');
+export function isAllowlistedFreeModel(
+  id: string,
+  allowlist: readonly string[] = FREE_FALLBACK_ALLOWLIST
+): boolean {
+  return allowlist.includes(id) && id.endsWith(':free') && !id.startsWith('openrouter/');
 }
 
 /** True only when every price field is present and exactly zero. */
@@ -75,11 +91,13 @@ function isZeroPriced(pricing: unknown): boolean {
 
 /**
  * Reads the public catalogue and decides whether `id` is usable, free, as a
- * fallback. Pure apart from `fetchImpl`, which tests replace.
+ * fallback. Pure apart from `fetchImpl`, which tests replace. `allowlist` is
+ * the production list unless a test supplies its own to exercise the checks.
  */
 export async function verifyFreeModel(
   id: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  allowlist: readonly string[] = FREE_FALLBACK_ALLOWLIST
 ): Promise<FreeModelVerification> {
   const fail = (reason: FreeModelVerification['reason']): FreeModelVerification => ({
     ok: false,
@@ -87,7 +105,7 @@ export async function verifyFreeModel(
     supportsImages: false
   });
 
-  if (!isAllowlistedFreeModel(id)) return fail('not_allowlisted');
+  if (!isAllowlistedFreeModel(id, allowlist)) return fail('not_allowlisted');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
@@ -128,7 +146,11 @@ export async function verifyFreeModel(
  * when it is healthy, one per five minutes when it is not, so a failing
  * catalogue never turns into a request per student turn.
  */
-export function createFreeModelGate(id: string, fetchImpl: () => typeof fetch = () => fetch) {
+export function createFreeModelGate(
+  id: string,
+  fetchImpl: () => typeof fetch = () => fetch,
+  allowlist: readonly string[] = FREE_FALLBACK_ALLOWLIST
+) {
   let cached: { result: FreeModelVerification; until: number } | null = null;
 
   return {
@@ -136,7 +158,7 @@ export function createFreeModelGate(id: string, fetchImpl: () => typeof fetch = 
     /** Whether the fallback may be used for this turn. */
     async check(needsImages: boolean, now: number = Date.now()): Promise<FreeModelVerification> {
       if (!cached || now >= cached.until) {
-        const result = await verifyFreeModel(id, fetchImpl());
+        const result = await verifyFreeModel(id, fetchImpl(), allowlist);
         cached = { result, until: now + (result.ok ? VERIFIED_TTL_MS : FAILED_TTL_MS) };
       }
       const { result } = cached;

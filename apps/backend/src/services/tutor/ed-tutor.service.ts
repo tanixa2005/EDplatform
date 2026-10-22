@@ -20,9 +20,18 @@ import { lessonFallbackReply, lessonIntroduction } from './lesson-fallback.js';
 import { resolveSessionCurriculum } from './session-curriculum.service.js';
 import { tutorSessionService } from './tutor-session.service.js';
 
-/** The outage reply for a lesson session, or null when its stored text is not suitable. */
-async function lessonFallbackFor(lessonId: string): Promise<string | null> {
+/**
+ * The outage reply for a lesson session, or null when its stored text must not
+ * or cannot be shown.
+ *
+ * Never while the student has a quiz in progress on this lesson or its
+ * chapter: a lesson's opening can contain exactly the fact a question tests,
+ * and an outage must not become a way to look answers up mid-quiz. That check
+ * comes first, and if it cannot be made the lesson text is not shown.
+ */
+async function lessonFallbackFor(userId: string, lessonId: string): Promise<string | null> {
   try {
+    if (await tutorSessionService.hasQuizInProgressForLesson(userId, lessonId)) return null;
     const source = await tutorSessionService.getLessonFallbackSource(lessonId);
     const introduction = lessonIntroduction(source?.content);
     return source && introduction ? lessonFallbackReply(source.title, introduction) : null;
@@ -219,12 +228,13 @@ export class EdTutorService {
       // about one lesson, show the lesson's own opening instead of a bare
       // error - verbatim stored text, labelled as such, never generated.
       // Anything else (a free chat, a partial reply, a lesson with no
-      // suitable text) keeps the ordinary unavailable message.
+      // suitable text, a quiz in progress) keeps the ordinary unavailable
+      // message.
       const outage =
         err instanceof ServiceUnavailableError && err.code === 'AI_PROVIDER_UNAVAILABLE';
       const fallback =
         outage && !hasImage && reply === '' && curriculumSource === 'topic' && session.lessonId
-          ? await lessonFallbackFor(session.lessonId)
+          ? await lessonFallbackFor(user.id, session.lessonId)
           : null;
       if (!fallback) throw err;
 

@@ -50,8 +50,11 @@ export const isOfflineProvider = primaryProvider.name === mockProvider.name;
  * upstream could avoid. See free-model-guard.ts for why it is this model and
  * how "free" is enforced.
  *
- * Built only when a real key is configured, with the same key and the
- * zero-price cap on every request. The Mock and the offline demo never get one.
+ * Built only when a real key is configured AND the model is on the reviewed
+ * allowlist, with the same key and the zero-price cap on every request. The
+ * allowlist is currently empty, so this is null in every environment and the
+ * retry loop never leaves the primary. The Mock and the offline demo never
+ * get one either.
  * A mutable holder rather than two constants so the offline tests can put a
  * scripted route in its place; nothing in production reassigns it.
  */

@@ -198,10 +198,15 @@ async function runAll(): Promise<void> {
   const usePrimary = (impl: (p: Parameters<typeof gemma.generateStream>[0]) => Promise<string>) => {
     (primaryProvider as unknown as { generateStream: unknown }).generateStream = impl;
   };
+  // The production allowlist is empty, so the fallback MECHANISM is exercised
+  // below with a test-only allowlist passed in explicitly. Section [0] proves
+  // that without it nothing can be called.
+  const TEST_ALLOWLIST = [INKLING];
+  const verifyForTest = () => guard.verifyFreeModel(INKLING, globalThis.fetch, TEST_ALLOWLIST);
   const resetRoutes = () => {
     usePrimary((p) => gemma.generateStream(p));
     aiFallback.provider = new OpenRouterAITutorProvider(TEST_KEY, INKLING, INKLING, { zeroPriceCap: true });
-    aiFallback.gate = guard.createFreeModelGate(INKLING);
+    aiFallback.gate = guard.createFreeModelGate(INKLING, undefined, TEST_ALLOWLIST);
   };
 
   // The exact prompt production would send: the real builder, unmodified.
@@ -234,10 +239,39 @@ async function runAll(): Promise<void> {
   };
 
   // -------------------------------------------------------------------------
-  console.log('\n[1] Free-only enforcement');
+  console.log('\n[0] Production allowlist: no fallback model can be called');
+
+  await check('The production fallback allowlist is empty', () => {
+    assert.deepEqual([...guard.FREE_FALLBACK_ALLOWLIST], []);
+    assert.equal(guard.isAllowlistedFreeModel(INKLING), false);
+  });
+
+  await check('The production gate refuses the evaluated model without any network call', async () => {
+    const gate = guard.createFreeModelGate(INKLING);
+    const out = await withScript({ chat: {} }, () => gate.check(false));
+    assert.deepEqual(out.result, { ok: false, reason: 'not_allowlisted', supportsImages: false });
+    assert.equal(out.requests.length, 0);
+  });
+
+  await check('Even with a fallback provider wired in, the production gate keeps every turn on Gemma', async () => {
+    usePrimary((p) => gemma.generateStream(p));
+    aiFallback.provider = new OpenRouterAITutorProvider(TEST_KEY, INKLING, INKLING, { zeroPriceCap: true });
+    aiFallback.gate = guard.createFreeModelGate(INKLING);
+    const out = await withScript(
+      { chat: { [GEMMA]: [upstream429()], [INKLING]: [ok('must never be sent')] } },
+      () => turn()
+    );
+    assert.deepEqual(modelsCalled(out.requests), [GEMMA, GEMMA, GEMMA]);
+    assert.equal(catalogueReads(out.requests), 0);
+    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    assert.match(out.logged, /free fallback not used \(not_allowlisted\)/);
+  });
+
+  // -------------------------------------------------------------------------
+  console.log('\n[1] Free-only enforcement (mechanism, with a test-only allowlist)');
 
   await check('The verified catalogue entry passes, with photo support', async () => {
-    const out = await withScript({ chat: {} }, () => guard.verifyFreeModel(INKLING));
+    const out = await withScript({ chat: {} }, verifyForTest);
     assert.deepEqual(out.result, { ok: true, reason: 'verified', supportsImages: true });
   });
 
@@ -268,9 +302,7 @@ async function runAll(): Promise<void> {
       [{}]
     ];
     for (const pricing of priced) {
-      const out = await withScript({ chat: {}, catalogue: catalogue({ pricing }) }, () =>
-        guard.verifyFreeModel(INKLING)
-      );
+      const out = await withScript({ chat: {}, catalogue: catalogue({ pricing }) }, verifyForTest);
       assert.equal(out.result?.reason, 'not_free', JSON.stringify(pricing));
     }
   });
@@ -284,14 +316,14 @@ async function runAll(): Promise<void> {
       [catalogue({ outputs: ['image'] }), 'text_unsupported']
     ];
     for (const [c, reason] of cases) {
-      const out = await withScript({ chat: {}, catalogue: c }, () => guard.verifyFreeModel(INKLING));
+      const out = await withScript({ chat: {}, catalogue: c }, verifyForTest);
       assert.equal(out.result?.ok, false);
       assert.equal(out.result?.reason, reason);
     }
   });
 
   await check('The catalogue read sends no key, no header and no body', async () => {
-    const out = await withScript({ chat: {} }, () => guard.verifyFreeModel(INKLING));
+    const out = await withScript({ chat: {} }, verifyForTest);
     const read = out.requests[0];
     assert.equal(read.url, CATALOGUE_URL);
     assert.equal(read.headers.get('authorization'), null);
@@ -622,11 +654,14 @@ async function runAll(): Promise<void> {
   console.log('\n[10] Lesson fallback in a real tutor turn (database replaced by fakes)');
 
   const { edTutorService } = await import('../services/tutor/ed-tutor.service.js');
-  const { tutorSessionService } = await import('../services/tutor/tutor-session.service.js');
+  const { tutorSessionService, quizInProgressWhere } = await import('../services/tutor/tutor-session.service.js');
   const { studentProfileService } = await import('../services/student-profile.service.js');
+  const realHasQuizInProgress = tutorSessionService.hasQuizInProgressForLesson;
 
   const LESSON = TOPICS[0];
   const persisted: string[] = [];
+  const quizChecks: string[] = [];
+  const sourceReads: string[] = [];
   const fakeSession = (lessonId: string | null) => ({
     id: 'session-1',
     userId: 'user-1',
@@ -645,8 +680,24 @@ async function runAll(): Promise<void> {
         }
       : null
   });
-  const stubs = (lessonId: string | null, lessonSource: { title: string; content: string } | null) => {
+  /** What the quiz-in-progress check answers: a boolean, an error, or the real database-backed method. */
+  type QuizState = boolean | 'throws' | 'real';
+  const stubs = (
+    lessonId: string | null,
+    lessonSource: { title: string; content: string } | null,
+    quiz: QuizState = false
+  ) => {
     const s = tutorSessionService as unknown as Record<string, unknown>;
+    quizChecks.length = 0;
+    sourceReads.length = 0;
+    s.hasQuizInProgressForLesson =
+      quiz === 'real'
+        ? realHasQuizInProgress
+        : async (userId: string, id: string) => {
+            quizChecks.push(`${userId}:${id}`);
+            if (quiz === 'throws') throw new Error('database unavailable');
+            return quiz;
+          };
     s.getOwnedSession = async () => fakeSession(lessonId);
     s.getRecentHistory = async () => [];
     s.appendStudentMessage = async () => ({ id: 'student-msg' });
@@ -656,7 +707,10 @@ async function runAll(): Promise<void> {
       persisted.push(text);
       return { id: 'ed-msg' };
     };
-    s.getLessonFallbackSource = async () => lessonSource;
+    s.getLessonFallbackSource = async () => {
+      sourceReads.push('read');
+      return lessonSource;
+    };
     (studentProfileService as unknown as Record<string, unknown>).getProfile = async () => null;
   };
   const user = { id: 'user-1', firstName: null } as unknown as Parameters<typeof edTutorService.streamTurn>[0];
@@ -677,6 +731,88 @@ async function runAll(): Promise<void> {
     assert.equal(chunks.join(''), lessonFallback.lessonFallbackReply(LESSON.title, intro));
     assert.equal(persisted[0], chunks.join(''));
     assert.ok(!out.logged.includes('STUDENT-CANARY'));
+    assert.deepEqual(quizChecks, ['user-1:lesson-1'], 'the quiz-in-progress check was not made for this student');
+  });
+
+  // -------------------------------------------------------------------------
+  console.log('\n[11] No lesson text while a quiz is in progress');
+
+  await check('With a quiz in progress, the lesson opening is never shown or even read', async () => {
+    resetRoutes();
+    persisted.length = 0;
+    stubs('lesson-1', { title: LESSON.title, content: LESSON.content }, true);
+    const chunks: string[] = [];
+    const out = await withScript(failingRoutes, () =>
+      edTutorService.streamTurn(user, 'session-1', { message: 'what is science?' } as never, (c) => {
+        chunks.push(c);
+      })
+    );
+    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    assert.equal(chunks.length, 0);
+    assert.equal(persisted.length, 0);
+    assert.equal(sourceReads.length, 0, 'the lesson text was read while a quiz was in progress');
+    const intro = lessonFallback.lessonIntroduction(LESSON.content)!;
+    assert.ok(!out.logged.includes(intro.slice(0, 40)));
+  });
+
+  await check('If the quiz check fails, the lesson opening is not shown', async () => {
+    resetRoutes();
+    persisted.length = 0;
+    stubs('lesson-1', { title: LESSON.title, content: LESSON.content }, 'throws');
+    const chunks: string[] = [];
+    const out = await withScript(failingRoutes, () =>
+      edTutorService.streamTurn(user, 'session-1', { message: 'hi' } as never, (c) => {
+        chunks.push(c);
+      })
+    );
+    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    assert.equal(chunks.length, 0);
+    assert.equal(sourceReads.length, 0);
+  });
+
+  await check('The real quiz check fails closed when the database cannot be reached', async () => {
+    resetRoutes();
+    persisted.length = 0;
+    // The real method, against the offline Prisma stub, which throws on any query.
+    stubs('lesson-1', { title: LESSON.title, content: LESSON.content }, 'real');
+    const chunks: string[] = [];
+    const out = await withScript(failingRoutes, () =>
+      edTutorService.streamTurn(user, 'session-1', { message: 'hi' } as never, (c) => {
+        chunks.push(c);
+      })
+    );
+    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    assert.equal(chunks.length, 0);
+    assert.equal(sourceReads.length, 0);
+  });
+
+  await check('"In progress" means this student, IN_PROGRESS, and a quiz covering this lesson or its chapter', () => {
+    assert.deepEqual(quizInProgressWhere('user-1', 'lesson-1', 'module-1'), {
+      userId: 'user-1',
+      status: 'IN_PROGRESS',
+      quiz: {
+        OR: [
+          { lessonId: 'lesson-1' },
+          { moduleId: 'module-1' },
+          { lesson: { moduleId: 'module-1' } },
+          { questions: { some: { lessonId: 'lesson-1' } } }
+        ]
+      }
+    });
+  });
+
+  await check('The safeguard reads quiz state only; lesson and quiz data are never written', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(
+      path.join(backendDir, 'src/services/tutor/tutor-session.service.ts'),
+      'utf8'
+    );
+    const method = source.slice(
+      source.indexOf('public async hasQuizInProgressForLesson'),
+      source.indexOf('public async getOwnedSession')
+    );
+    assert.ok(method.length > 0, 'the method was not found');
+    assert.ok(!/\.(create|update|upsert|delete|deleteMany|updateMany|createMany)\(/.test(method));
   });
 
   await check('A free chat with both routes down gets the unavailable message, not lesson text', async () => {

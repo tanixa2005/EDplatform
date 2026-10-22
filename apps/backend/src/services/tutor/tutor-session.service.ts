@@ -13,7 +13,7 @@ import type {
   TutorSessionDetailDto,
   TutorSessionSummaryDto
 } from '@edplatform/shared';
-import type { TutorMessage, TutorSession } from '@prisma/client';
+import type { Prisma, TutorMessage, TutorSession } from '@prisma/client';
 import { prisma } from '../../config/prisma.config.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../errors/app.error.js';
 import { studentProfileService } from '../student-profile.service.js';
@@ -21,6 +21,33 @@ import { deriveSessionTitle } from './prompt-builder.service.js';
 
 /** How many prior turns are replayed to the model. Bounds tokens per request. */
 export const TUTOR_HISTORY_TURNS = 12;
+
+/**
+ * The quiz attempts that count as "in progress on this lesson", as a query.
+ * Kept pure and exported so the exact rule is tested without a database.
+ */
+export function quizInProgressWhere(
+  userId: string,
+  lessonId: string,
+  moduleId: string
+): Prisma.QuizAttemptWhereInput {
+  return {
+    userId,
+    status: 'IN_PROGRESS',
+    quiz: {
+      OR: [
+        // A quiz hosted on this lesson.
+        { lessonId },
+        // A quiz hosted on this lesson's chapter.
+        { moduleId },
+        // A chapter quiz hosted on another lesson of the same chapter.
+        { lesson: { moduleId } },
+        // Any quiz with a question about this lesson.
+        { questions: { some: { lessonId } } }
+      ]
+    }
+  };
+}
 
 type SessionWithCount = TutorSession & { _count: { messages: number } };
 
@@ -278,6 +305,30 @@ export class TutorSessionService {
     if (!lesson || !lesson.isPublished || !lesson.module.course.isPublished) return null;
     if (!lesson.content) return null;
     return { title: lesson.title, content: lesson.content };
+  }
+
+  /**
+   * Whether this student has a quiz in progress that covers this lesson.
+   *
+   * Read-only, and only asked when the outage fallback is about to show
+   * lesson text. "In progress" is any IN_PROGRESS attempt by this student on
+   * a quiz hosted on this lesson, on its chapter, on another lesson in its
+   * chapter, or containing a question about this lesson. A timed attempt that
+   * has run out but was never closed still counts - it is only marked expired
+   * when the student next opens the quiz - which errs towards not showing the
+   * text. An unknown lesson counts as in progress for the same reason.
+   */
+  public async hasQuizInProgressForLesson(userId: string, lessonId: string): Promise<boolean> {
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { moduleId: true }
+    });
+    if (!lesson) return true;
+    const attempt = await prisma.quizAttempt.findFirst({
+      where: quizInProgressWhere(userId, lessonId, lesson.moduleId),
+      select: { id: true }
+    });
+    return attempt !== null;
   }
 
   /**
