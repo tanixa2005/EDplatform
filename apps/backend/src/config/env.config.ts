@@ -64,6 +64,18 @@ export const envSchema = z
      */
     OPENROUTER_VISION_MODEL: z.string().optional().default('openrouter/free'),
 
+    /**
+     * A switch that stops every external AI request without touching the AI
+     * configuration above. 'live' (or unset) is normal operation. Any other
+     * value pauses: tutor turns, photo questions and quiz hints are refused
+     * with a plain message before anything is stored or sent, and quiz
+     * analysis uses the local, non-AI version.
+     *
+     * A free string rather than an enum on purpose: a typo must pause the AI,
+     * never stop the whole server from starting. See ai-availability.ts.
+     */
+    AI_TUTOR_MODE: z.string().optional().default('live'),
+
     // DEPRECATED, kept only so an existing .env with these still parses. The
     // Gemini provider is no longer selectable; nothing reads these values.
     GEMINI_API_KEY: z.string().optional().default(''),

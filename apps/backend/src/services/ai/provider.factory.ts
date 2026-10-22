@@ -1,6 +1,7 @@
 import { env } from '../../config/env.config.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
+import { aiPausedError, isAiTutorPaused } from './ai-availability.js';
 import { MockAITutorProvider } from './mock.provider.js';
 import { failureCategory, providerFailureDiagnostic } from './failure-diagnostics.js';
 import type { OpenRouterFailureDetails } from './openrouter-failure.js';
@@ -43,6 +44,11 @@ export const primaryProvider: IAITutorProvider = (() => {
 
 /** True when this process has no real provider at all - local dev with no key. */
 export const isOfflineProvider = primaryProvider.name === mockProvider.name;
+
+if (isAiTutorPaused()) {
+  // Logged at startup so the state of production is visible in one line.
+  console.log('🤖 AI tutor: PAUSED by AI_TUTOR_MODE - no external AI requests will be made');
+}
 
 /**
  * Retry policy, in one place rather than scattered through the call sites.
@@ -300,6 +306,11 @@ function emptyStreamError(): Error {
 }
 
 export async function streamWithFallback(params: StreamParams): Promise<string> {
+  // Every streamed AI feature - tutor turns, photo questions, quiz hints -
+  // passes through here, so this one check covers them all even if a caller
+  // forgets its own. Nothing is sent and the retry loop never starts.
+  if (isAiTutorPaused()) throw aiPausedError();
+
   // No special case for the offline provider. When the Mock IS the configured
   // provider it simply never throws, so this path behaves identically for it -
   // and keeping one code path means the retry and failure behaviour is the
