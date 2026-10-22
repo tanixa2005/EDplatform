@@ -33,6 +33,7 @@
     "test:demo-entry-guard": "tsx src/__tests__/verify_demo_entry_guard.ts",
     "test:auth-middleware": "tsx src/__tests__/verify_auth_middleware.ts",
     "test:webhook-handler": "tsx src/__tests__/verify_webhook_handler.ts",
+    "test:openrouter-errors": "tsx src/__tests__/verify_openrouter_errors.ts",
     "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
     "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
     "predb:seed:lessons": "node scripts/db-guard.mjs --print",
