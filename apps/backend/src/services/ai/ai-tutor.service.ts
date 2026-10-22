@@ -14,6 +14,7 @@ import {
   BadRequestError,
 } from '../../errors/app.error.js';
 import type { CurriculumMeta, StreamMeta } from './ai-provider.interface.js';
+import { isAiTutorPaused } from './ai-availability.js';
 import { primaryProvider, streamWithFallback } from './provider.factory.js';
 import { quizService } from '../quiz.service.js';
 import { studentProfileService } from '../student-profile.service.js';
@@ -640,6 +641,16 @@ Explanation: ${q.explanation || 'None provided'}
         recommendedTopics: [],
       };
     };
+
+    // While AI is paused, the local analysis is the answer: built from the
+    // stored questions, answers and explanations, with no request sent.
+    // Returned directly rather than through the cache below, so a non-AI
+    // analysis is never stored as this attempt's permanent result and the
+    // pause writes nothing to the database.
+    if (isAiTutorPaused()) {
+      console.log('[AI] quiz analysis served locally: AI_TUTOR_MODE is paused');
+      return fallbackGenerator();
+    }
 
     try {
       const rawResult = await primaryProvider.generateStructured<{
