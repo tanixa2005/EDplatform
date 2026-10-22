@@ -1,5 +1,6 @@
 import { IAITutorProvider, StreamParams, StructuredParams } from './ai-provider.interface.js';
 import { categoryForStatus } from './failure-diagnostics.js';
+import { describeOpenRouterFailure, formatFailureDetails } from './openrouter-failure.js';
 
 /**
  * OpenRouter, via its OpenAI-compatible chat-completions API.
@@ -22,9 +23,9 @@ import { categoryForStatus } from './failure-diagnostics.js';
  *      arrive as constructor arguments, so configuration stays in env.config
  *      and there is exactly one place that decides which provider is live.
  *
- * Nothing here logs a prompt, a reply, a header or the key. A failure logs its
- * status and a truncated upstream message, which is what the retry policy and
- * a human debugging an outage actually need.
+ * Nothing here logs a prompt, a reply, a request header or the key. A failure
+ * logs its status, a fixed reason label and the numeric rate-limit fields,
+ * which is what the retry policy and a human debugging an outage actually need.
  */
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -207,26 +208,37 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
     return messages;
   }
 
-  /** Turns a non-2xx response into the error shape the retry policy reads. */
   /**
    * Turns a non-OK response into a diagnosable error.
    *
-   * The response body is deliberately never read. It can echo the request back,
-   * and the request carries the student's question and photo. The status, the
-   * category and the model id are enough to tell a wrong route from a quota
-   * from an outage, and they are all this logs.
+   * The status alone could not tell a spent daily allowance from a free model
+   * being throttled upstream - both are 429 - so they were retried alike. The
+   * body is now read to tell them apart, but never copied: it can echo the
+   * request back, and the request carries the student's question and photo.
+   * describeOpenRouterFailure reduces it to a fixed reason label and numeric
+   * rate-limit fields, and those are all that reach the log or the error.
    */
-  private failureFrom(res: Response, label: string, model: string): Error {
+  private async failureFrom(res: Response, label: string, model: string): Promise<Error> {
     const category = categoryForStatus(res.status);
+    let bodyText = '';
+    try {
+      bodyText = await res.text();
+    } catch {
+      // An unreadable body still leaves the status, which is enough to fail on.
+    }
+    const details = describeOpenRouterFailure(res.status, res.headers, bodyText);
     console.error(
-      `[${this.name}] ${label} failed: status=${res.status} category=${category} model=${model}`
+      `[${this.name}] ${label} failed: status=${res.status} category=${category} model=${model} ` +
+        formatFailureDetails(details)
     );
-    return providerError(
-      `OpenRouter ${label} failed with status ${res.status}`,
+    const err = providerError(
+      `OpenRouter ${label} failed with status ${res.status} (reason=${details.reason})`,
       res.status,
       category,
       model
     );
+    // Read by the retry policy: whether waiting can help, and for how long.
+    return Object.assign(err, { rateLimit: details });
   }
 
   public async generateStream(params: StreamParams): Promise<string> {
@@ -263,7 +275,7 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
         })
       });
 
-      if (!res.ok) throw this.failureFrom(res, 'stream', model);
+      if (!res.ok) throw await this.failureFrom(res, 'stream', model);
       if (!res.body) {
         throw providerError('OpenRouter returned no response body', res.status, 'empty_stream', model);
       }
@@ -375,7 +387,7 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
         })
       });
 
-      if (!res.ok) throw this.failureFrom(res, 'structured generation', this.model);
+      if (!res.ok) throw await this.failureFrom(res, 'structured generation', this.model);
 
       const body = (await res.json()) as {
         choices?: Array<{ message?: { content?: unknown } }>;
