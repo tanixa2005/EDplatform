@@ -110,10 +110,18 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
   private readonly model: string;
   /** Route for turns carrying a photo. Empty means photos are not supported. */
   private readonly visionModel: string;
+  /** When set, every request asks OpenRouter to refuse any non-zero price. */
+  private readonly zeroPriceCap: boolean;
 
-  constructor(apiKey: string, model = 'nvidia/nemotron-3.5-lightning:free', visionModel = '') {
+  constructor(
+    apiKey: string,
+    model = 'nvidia/nemotron-3.5-lightning:free',
+    visionModel = '',
+    options: { zeroPriceCap?: boolean } = {}
+  ) {
     this.apiKey = apiKey;
     this.model = model;
+    this.zeroPriceCap = options.zeroPriceCap === true;
 
     // Zero budget is a hard rule, so a vision route that is not a ':free'
     // variant is not used at all. This is checked here, in the one place a
@@ -148,6 +156,19 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
   /** The route for this request: the vision one only when a photo is attached. */
   private modelFor(hasImage: boolean): string {
     return hasImage && this.supportsImages ? this.visionModel : this.model;
+  }
+
+  /**
+   * The routing constraint added to a capped request, or nothing.
+   *
+   * `max_price` is OpenRouter's documented ceiling on provider pricing: a
+   * request it cannot serve at or below that price does not run. Zero on every
+   * dimension means a capped request can only ever be served free. Uncapped
+   * requests (the configured Gemma route) send exactly the body they always did.
+   */
+  private routingConstraint(): { provider?: { max_price: Record<string, number> } } {
+    if (!this.zeroPriceCap) return {};
+    return { provider: { max_price: { prompt: 0, completion: 0, request: 0, image: 0 } } };
   }
 
   /**
@@ -271,7 +292,8 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
           model,
           messages: this.buildMessages({ systemPrompt, userPrompt, history, images }),
           temperature: 0.7,
-          stream: true
+          stream: true,
+          ...this.routingConstraint()
         })
       });
 
@@ -383,7 +405,8 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
           // Lower than the streaming path: this extracts a fixed shape rather
           // than teaching, so determinism beats variety.
           temperature: 0.3,
-          response_format: { type: 'json_object' }
+          response_format: { type: 'json_object' },
+          ...this.routingConstraint()
         })
       });
 

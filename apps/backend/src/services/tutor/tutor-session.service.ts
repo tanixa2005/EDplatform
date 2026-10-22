@@ -256,6 +256,31 @@ export class TutorSessionService {
   }
 
   /**
+   * The stored body of a session's lesson, for the outage fallback only.
+   *
+   * Read separately, and only when every AI route has failed, so the page body
+   * stays out of the per-turn query (see getOwnedSession). Read-only. Returns
+   * null unless the lesson and its course are still published - the same rows
+   * the session was authorised against, re-checked rather than trusted.
+   */
+  public async getLessonFallbackSource(
+    lessonId: string
+  ): Promise<{ title: string; content: string } | null> {
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+        title: true,
+        content: true,
+        isPublished: true,
+        module: { select: { course: { select: { isPublished: true } } } }
+      }
+    });
+    if (!lesson || !lesson.isPublished || !lesson.module.course.isPublished) return null;
+    if (!lesson.content) return null;
+    return { title: lesson.title, content: lesson.content };
+  }
+
+  /**
    * Loads a session and asserts ownership. Every tutor read and write goes
    * through here, so a student can never reach another student's conversation.
    */
