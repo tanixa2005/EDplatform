@@ -368,16 +368,63 @@ async function runAll(): Promise<void> {
     assert.match(out.logged, /quiz analysis served locally/);
   });
 
-  await check('Paused quiz analysis still returns an analysis already stored for the attempt', async () => {
+  /** A schema-valid stored AI analysis, marked so it can be told apart from the local one. */
+  const storedAiAnalysis = async (): Promise<string> => {
+    setMode('paused');
+    useAttempt(submittedAttempt());
+    const local = (await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'))).result as unknown as Record<
+      string,
+      unknown
+    >;
+    const stored = {
+      ...local,
+      generalFeedback: 'AI-CACHED-MARKER: an earlier AI-written summary.',
+      strengths: ['AI-CACHED-MARKER strength']
+    };
+    quizMistakeAnalysisResultSchema.parse(stored);
+    return JSON.stringify(stored);
+  };
+
+  await check('Paused quiz analysis ignores a stored AI analysis and serves the local one', async () => {
+    const stored = await storedAiAnalysis();
     setMode('paused');
     reset();
-    useAttempt(submittedAttempt());
-    const first = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
-    const stored = JSON.stringify(first.result);
+    updates.length = 0;
+    useAttempt(submittedAttempt({ aiFeedback: stored }));
+    const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
+    assert.equal(out.error, null, String(out.error));
+    assert.ok(!JSON.stringify(out.result).includes('AI-CACHED-MARKER'), 'the stored AI analysis was served while paused');
+    assert.match((out.result as { generalFeedback: string }).generalFeedback, /You got 1 of 2 right/);
+    assert.equal(openRouterCalls(), 0);
+    assert.equal(updates.length, 0, 'the stored analysis was overwritten while paused');
+  });
+
+  await check('Paused quiz analysis attempts no write even when a write would fail', async () => {
+    setMode('paused');
+    reset();
+    g.__EDP_PRISMA_FIXTURE__ = {
+      quizAttempt: {
+        findUnique: async () => submittedAttempt(),
+        update: async () => {
+          throw new Error('database write refused');
+        }
+      }
+    };
+    const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
+    assert.equal(out.error, null, String(out.error));
+    assert.ok(!/could not cache/.test(out.logged), 'a cache write was attempted');
+  });
+
+  await check('Live quiz analysis still serves a stored analysis without a request, as before', async () => {
+    const stored = await storedAiAnalysis();
+    setMode('live');
+    reset();
+    updates.length = 0;
     useAttempt(submittedAttempt({ aiFeedback: stored }));
     const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
     assert.deepEqual(out.result, JSON.parse(stored));
     assert.equal(openRouterCalls(), 0);
+    assert.equal(updates.length, 0);
   });
 
   await check('Paused quiz analysis keeps every access check: another student is still refused', async () => {
@@ -385,6 +432,46 @@ async function runAll(): Promise<void> {
     useAttempt(submittedAttempt({ userId: 'someone-else' }));
     const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
     assert.ok(out.error, 'another student was allowed through');
+  });
+
+  await check('Paused quiz analysis still refuses an attempt that is not submitted', async () => {
+    setMode('paused');
+    reset();
+    useAttempt(submittedAttempt({ status: 'IN_PROGRESS' }));
+    const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
+    assert.ok(out.error, 'an unsubmitted attempt was analysed');
+    assert.match((out.error as Error).message, /not submitted/);
+    assert.equal(openRouterCalls(), 0);
+  });
+
+  await check('Paused quiz analysis still refuses a student outside the course class', async () => {
+    setMode('paused');
+    reset();
+    const profile = (studentProfileService as unknown as Record<string, unknown>).getProfile;
+    (studentProfileService as unknown as Record<string, unknown>).getProfile = async () => ({ classLevel: 'CLASS_8' });
+    try {
+      useAttempt(submittedAttempt());
+      const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
+      assert.ok(out.error, 'a Class 8 student was given a Class 6 analysis');
+    } finally {
+      (studentProfileService as unknown as Record<string, unknown>).getProfile = profile;
+    }
+  });
+
+  await check('A database error loading the attempt is reported, never replaced by a made-up analysis', async () => {
+    setMode('paused');
+    reset();
+    g.__EDP_PRISMA_FIXTURE__ = {
+      quizAttempt: {
+        findUnique: async () => {
+          throw new Error('database unavailable');
+        }
+      }
+    };
+    const out = await quietly(() => aiTutorService.analyzeQuizMistakes(user, 'attempt-1'));
+    assert.ok(out.error, 'an analysis was produced without the attempt');
+    assert.equal(out.result, null);
+    assert.equal(openRouterCalls(), 0);
   });
 
   // -------------------------------------------------------------------------

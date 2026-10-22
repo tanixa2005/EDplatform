@@ -449,7 +449,13 @@ export class AITutorService {
       throw new BadRequestError('Quiz attempt is not submitted yet. Mistake analysis is only available after submission.');
     }
 
-    // Already analysed? Reuse it.
+    // The pause is decided here, once: after every access, ownership and
+    // submission check above, and before the stored analysis below. While
+    // paused the student gets only the local, non-AI analysis - a stored AI
+    // analysis is not served - and nothing is written.
+    const aiPaused = isAiTutorPaused();
+
+    // Already analysed? Reuse it (not while paused - see above).
     //
     // QuizAttempt.aiFeedback has existed in the schema since before this
     // feature and was never written to. A submitted attempt is immutable, so
@@ -459,7 +465,7 @@ export class AITutorService {
     //
     // A stored value that no longer parses is ignored rather than trusted, so
     // a shape change can never feed malformed data to the UI.
-    if (attempt.aiFeedback) {
+    if (!aiPaused && attempt.aiFeedback) {
       const cached = quizMistakeAnalysisResultSchema.safeParse(
         JSON.parse(attempt.aiFeedback) as unknown
       );
@@ -647,7 +653,7 @@ Explanation: ${q.explanation || 'None provided'}
     // Returned directly rather than through the cache below, so a non-AI
     // analysis is never stored as this attempt's permanent result and the
     // pause writes nothing to the database.
-    if (isAiTutorPaused()) {
+    if (aiPaused) {
       console.log('[AI] quiz analysis served locally: AI_TUTOR_MODE is paused');
       return fallbackGenerator();
     }
