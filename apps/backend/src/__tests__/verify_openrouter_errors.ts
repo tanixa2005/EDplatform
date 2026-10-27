@@ -142,6 +142,9 @@ async function runAll(): Promise<void> {
   process.env.OPENROUTER_API_KEY = '';
   process.env.OFFLINE_DEMO_AI = 'false';
   process.env.NODE_ENV = 'test';
+  // This suite exercises the live retry path, so it opts in explicitly: AI is
+  // off by default. fetch is still a recorder, so nothing leaves the process.
+  process.env.AI_TUTOR_MODE = 'live';
 
   const { describeOpenRouterFailure, formatFailureDetails } = await import('../services/ai/openrouter-failure.js');
   const { OpenRouterAITutorProvider, isFreeVisionRoute } = await import('../services/ai/openrouter.provider.js');

@@ -352,10 +352,17 @@ async function runAll(): Promise<void> {
     assert.equal(r.status, 1);
   });
 
-  await check('The flag is off by default: production with no key still refuses to start (regression)', () => {
-    const r = runProbe('prod-nokey', ENV_PROBE, childEnv({ OFFLINE_DEMO_AI: '', OFFLINE_DEMO_EXPECT_ENDPOINT: '' }));
+  await check('The flag is off by default: production in live AI mode with no key still refuses to start (regression)', () => {
+    const r = runProbe('prod-nokey', ENV_PROBE, childEnv({ OFFLINE_DEMO_AI: '', OFFLINE_DEMO_EXPECT_ENDPOINT: '', AI_TUTOR_MODE: 'live' }));
     assert.equal(r.status, 1);
     assert.match(r.output, /OPENROUTER_API_KEY is required in production/);
+  });
+
+  await check('The flag is off by default: production with AI off and no key starts, with the flag off', () => {
+    const r = runProbe('prod-nokey-paused', ENV_PROBE, childEnv({ OFFLINE_DEMO_AI: '', OFFLINE_DEMO_EXPECT_ENDPOINT: '' }));
+    assert.equal(r.status, 0, r.output);
+    assert.match(r.output, /ENV_OK offline=false/);
+    assertNoSecrets(r.output);
   });
 
   await check('The flag is off by default: production with a key starts with the flag off (regression)', () => {

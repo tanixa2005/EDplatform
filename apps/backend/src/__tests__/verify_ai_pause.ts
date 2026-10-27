@@ -166,7 +166,7 @@ async function runAll(): Promise<void> {
   const { quizMistakeAnalysisResultSchema } = await import('@edplatform/shared');
 
   const setMode = (value: string | undefined) => {
-    (env as { AI_TUTOR_MODE: string }).AI_TUTOR_MODE = value ?? 'live';
+    (env as { AI_TUTOR_MODE: string }).AI_TUTOR_MODE = value ?? 'paused';
   };
 
   // The real OpenRouter provider, wired in with the fake key, for both stream
@@ -234,15 +234,15 @@ async function runAll(): Promise<void> {
   // -------------------------------------------------------------------------
   console.log('\n[1] Reading AI_TUTOR_MODE');
 
-  await check('Unset, blank and "live" (any case) mean live', () => {
-    for (const v of [undefined, null, '', '  ', 'live', 'LIVE', ' Live ']) {
+  await check('Only "live" (any case, surrounding spaces ignored) means live', () => {
+    for (const v of ['live', 'LIVE', ' Live ']) {
       assert.equal(availability.resolveAiTutorMode(v), 'live', String(v));
     }
   });
 
-  await check('"paused", and every other value including typos, mean paused', () => {
-    for (const v of ['paused', 'PAUSED', 'pause', 'off', 'true', 'false', '0', 'livee', 'on']) {
-      assert.equal(availability.resolveAiTutorMode(v), 'paused', v);
+  await check('Unset, blank, "paused", and every other value including typos, mean paused', () => {
+    for (const v of [undefined, null, '', '  ', 'paused', 'PAUSED', 'pause', 'off', 'true', 'false', '0', 'livee', 'on']) {
+      assert.equal(availability.resolveAiTutorMode(v), 'paused', String(v));
     }
   });
 
@@ -250,9 +250,10 @@ async function runAll(): Promise<void> {
     assert.equal(availability.AI_PAUSED_MESSAGE, EXPECTED_MESSAGE);
   });
 
-  await check('The setting defaults to live when the variable is absent', () => {
-    assert.equal(env.AI_TUTOR_MODE, 'live');
-    assert.equal(availability.isAiTutorPaused(), false);
+  await check('The setting defaults to paused when the variable is absent', () => {
+    assert.equal(env.AI_TUTOR_MODE, 'paused');
+    assert.equal(availability.isAiTutorPaused(), true);
+    assert.equal(availability.isExternalAiAllowed(), false);
   });
 
   // -------------------------------------------------------------------------

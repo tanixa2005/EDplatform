@@ -60,7 +60,8 @@ Configure these variables in your backend hosting environment (e.g., Render, Rai
 | `COOKIE_SECURE` | No | `true` | Enforces `Secure` flag on `auth_token` cookie (defaults to `true` when `NODE_ENV=production`). |
 | `COOKIE_SAME_SITE` | **Yes** | `lax` or `none` | Set to `lax` for same-domain setups, or `none` if frontend and backend have different domains. |
 | `COOKIE_DOMAIN` | No | `.yourdomain.com` | Optional shared root domain for subdomains. Leave unset for host-only cookies. |
-| `OPENROUTER_API_KEY` | **Yes** (for live AI) | none | Your OpenRouter API key. Set it in the host's secret store. Without it the app serves the offline Mock instead of AI tutoring. See [AI tutor provider](#ai-tutor-provider-openrouter). |
+| `AI_TUTOR_MODE` | No | unset, or `live` | External AI switch. **Off by default:** unset or any value other than `live` means no request is sent to any AI provider. See [AI tutor provider](#ai-tutor-provider-openrouter). |
+| `OPENROUTER_API_KEY` | Only when `AI_TUTOR_MODE=live` | none | Your OpenRouter API key. Set it in the host's secret store. Not needed, and best left unset, while AI is off. See [AI tutor provider](#ai-tutor-provider-openrouter). |
 | `OPENROUTER_MODEL` | No | `apodex/apodex-1.1-mini:free` | Text model for ordinary tutoring. |
 | `OPENROUTER_VISION_MODEL` | No | `openrouter/free` | Route used only for questions that include a photo. Empty turns photo questions off. |
 | `CLERK_SECRET_KEY` | **Yes** | `sk_live_...` | Verifies Clerk session tokens locally against the cached JWKS. While unset, the backend falls back to the legacy JWT cookie. |
@@ -69,6 +70,12 @@ Configure these variables in your backend hosting environment (e.g., Render, Rai
 
 ### AI tutor provider (OpenRouter)
 
+**External AI is off by default.** Unless `AI_TUTOR_MODE` is exactly `live`, the backend sends no request to any AI provider: tutor chat, photo questions and quiz hints show a short "paused" message, and quiz analysis uses the local, non-AI version. Lessons, quizzes, sign-in, the public catalogue and read-aloud keep working. No `OPENROUTER_API_KEY` is needed while AI is off, and the OpenRouter client is never created even if a key is present.
+
+**Check after every deploy with AI off:** the backend's startup log should contain `AI provider: disabled (AI_TUTOR_MODE is not live; no external AI client is created)` and `AI tutor: PAUSED by AI_TUTOR_MODE - no external AI requests will be made`. Asking ED a question on the deployed app should show the paused message.
+
+The rest of this section applies only when external AI is deliberately turned on with `AI_TUTOR_MODE=live`.
+
 The AI tutor uses two OpenRouter routes. **Both must be configured and checked on the deployment host.** They are separate settings, so changing one does not change the other.
 
 - **Text route** (`OPENROUTER_MODEL`) is used for every ordinary tutoring turn. The default is `apodex/apodex-1.1-mini:free`.
@@ -76,13 +83,13 @@ The AI tutor uses two OpenRouter routes. **Both must be configured and checked o
 
 Keep keys and private URLs out of the repository and this document. Set `OPENROUTER_API_KEY` in the host's secret store only.
 
-**Missing configuration is not a working AI provider.** Without `OPENROUTER_API_KEY` the app still starts, and it serves the offline Mock. The Mock gives canned replies, not tutoring. Treat that as a failed deployment, not a successful one.
+**In live mode, missing configuration is not a working AI provider.** A production backend with `AI_TUTOR_MODE=live` and no `OPENROUTER_API_KEY` refuses to start, rather than serving canned Mock replies.
 
-**Check both routes after every deploy:**
+**With AI live, check both routes after every deploy:**
 
 1. Open the backend's startup log on the host. It should contain one line in this form:
    `AI provider: OpenRouter (<text model>), photos: <photo route>`
-   If it reads `AI provider: Mock (OPENROUTER_API_KEY not set)`, the key is missing.
+   If it reads `AI provider: disabled`, `AI_TUTOR_MODE` is not set to `live`.
 2. Confirm the two model ids in that line are the intended ones, and confirm on your OpenRouter account that the photo route is free.
 3. On the deployed app, send one text question and one photo question. Each should get a real answer.
 

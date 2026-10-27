@@ -1,4 +1,5 @@
 import { IAITutorProvider, StreamParams, StructuredParams } from './ai-provider.interface.js';
+import { aiPausedError, isExternalAiAllowed } from './ai-availability.js';
 import { categoryForStatus } from './failure-diagnostics.js';
 import { describeOpenRouterFailure, formatFailureDetails } from './openrouter-failure.js';
 
@@ -23,6 +24,12 @@ import { describeOpenRouterFailure, formatFailureDetails } from './openrouter-fa
  *      arrive as constructor arguments, so configuration stays in env.config
  *      and there is exactly one place that decides which provider is live.
  *
+ * Both request methods start with the AI_TUTOR_MODE check (assertExternalAiAllowed
+ * below), before any request is built. That is the last line of defence: code
+ * that constructs this provider directly, or reaches it without the service
+ * checks, is still refused while external AI is not allowed. The mode is read
+ * through ai-availability, not from the environment here.
+ *
  * Nothing here logs a prompt, a reply, a request header or the key. A failure
  * logs its status, a fixed reason label and the numeric rate-limit fields,
  * which is what the retry policy and a human debugging an outage actually need.
@@ -46,6 +53,14 @@ const APP_TITLE = 'EDplatform AI';
  */
 const STREAM_TIMEOUT_MS = 90_000;
 const STRUCTURED_TIMEOUT_MS = 60_000;
+
+/**
+ * Refuses unless external AI is allowed right now. Called first in each request
+ * method and read on every call, so a paused process never builds a request.
+ */
+function assertExternalAiAllowed(): void {
+  if (!isExternalAiAllowed()) throw aiPausedError();
+}
 
 type ChatRole = 'system' | 'user' | 'assistant';
 
@@ -242,6 +257,7 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
   }
 
   public async generateStream(params: StreamParams): Promise<string> {
+    assertExternalAiAllowed();
     const { systemPrompt, userPrompt, history = [], images = [], onChunk } = params;
 
     const controller = new AbortController();
@@ -362,6 +378,7 @@ export class OpenRouterAITutorProvider implements IAITutorProvider {
   }
 
   public async generateStructured<T>(params: StructuredParams<T>): Promise<T> {
+    assertExternalAiAllowed();
     const { systemPrompt, userPrompt, fallbackGenerator } = params;
 
     const controller = new AbortController();

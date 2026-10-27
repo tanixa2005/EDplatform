@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { DEFAULT_AI_TUTOR_MODE, resolveAiTutorMode } from './ai-mode.js';
 import { parseAllowedOrigins } from './cors-origins.js';
 import { offlineDemoProblems } from './offline-demo.js';
 
@@ -31,9 +32,10 @@ export const envSchema = z
     COOKIE_SECURE: z.string().optional().transform((val) => val === 'true'),
     COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     COOKIE_DOMAIN: z.string().optional().transform((val) => (val && val.trim() !== '' ? val : undefined)),
-    // OpenRouter is the live AI provider. Optional with an empty default, so
-    // the app boots and builds with no key at all and the Mock answers - which
-    // is what every local run and the whole security suite rely on.
+    // OpenRouter is the live AI provider, used only when AI_TUTOR_MODE is
+    // 'live'. Optional with an empty default, so the app boots and builds with
+    // no key at all - which is what every local run and the whole security
+    // suite rely on.
     OPENROUTER_API_KEY: z.string().optional().default(''),
     // Configurable for the same reason the Gemini model id was: hosted model
     // ids are retired and renamed, and a free-tier id especially so. Override
@@ -65,16 +67,16 @@ export const envSchema = z
     OPENROUTER_VISION_MODEL: z.string().optional().default('openrouter/free'),
 
     /**
-     * A switch that stops every external AI request without touching the AI
-     * configuration above. 'live' (or unset) is normal operation. Any other
-     * value pauses: tutor turns, photo questions and quiz hints are refused
-     * with a plain message before anything is stored or sent, and quiz
-     * analysis uses the local, non-AI version.
+     * The switch for every external AI request. OFF by default: only 'live'
+     * turns it on. Unset or any other value pauses: tutor turns, photo
+     * questions and quiz hints are refused with a plain message before
+     * anything is stored or sent, quiz analysis uses the local, non-AI version,
+     * and the OpenRouter client is never created.
      *
      * A free string rather than an enum on purpose: a typo must pause the AI,
-     * never stop the whole server from starting. See ai-availability.ts.
+     * never stop the whole server from starting. See config/ai-mode.ts.
      */
-    AI_TUTOR_MODE: z.string().optional().default('live'),
+    AI_TUTOR_MODE: z.string().optional().default(DEFAULT_AI_TUTOR_MODE),
 
     // DEPRECATED, kept only so an existing .env with these still parses. The
     // Gemini provider is no longer selectable; nothing reads these values.
@@ -100,13 +102,19 @@ export const envSchema = z
     }
 
     if (data.NODE_ENV === 'production') {
-      // Without a key the factory would select the Mock, which answers with
-      // canned replies and no sign that the AI is off. In production that is a
-      // silent failure, so startup refuses instead. The message names the
-      // variable and never the value.
-      // The offline demo is the one explicit exception, and it is only accepted by
+      // In live mode, without a key the factory would select the Mock, which
+      // answers with canned replies and no sign that the AI is off. In
+      // production that is a silent failure, so startup refuses instead. The
+      // message names the variable and never the value.
+      // While AI is paused no key is needed: the factory selects the disabled
+      // provider, which refuses honestly and never touches the network.
+      // The offline demo is the other exception, and it is only accepted by
       // offlineDemoProblems above, which refuses any key and any other database.
-      if (data.OPENROUTER_API_KEY.trim() === '' && !data.OFFLINE_DEMO_AI) {
+      if (
+        resolveAiTutorMode(data.AI_TUTOR_MODE) === 'live' &&
+        data.OPENROUTER_API_KEY.trim() === '' &&
+        !data.OFFLINE_DEMO_AI
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['OPENROUTER_API_KEY'],

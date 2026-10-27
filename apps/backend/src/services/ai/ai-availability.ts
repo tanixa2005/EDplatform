@@ -1,20 +1,27 @@
 import { env } from '../../config/env.config.js';
+import { resolveAiTutorMode } from '../../config/ai-mode.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 
 /**
  * Whether ED may contact an external AI provider at all.
  *
- * A temporary, reversible pause, controlled by AI_TUTOR_MODE. It sits in front
- * of the provider rather than replacing it: the OpenRouter key, the model ids
- * and the teaching prompt all stay configured exactly as they are, they are
- * just not used while paused. Removing the variable (or setting it to 'live')
- * restores normal operation with nothing else to undo.
+ * Controlled by AI_TUTOR_MODE and OFF by default: only 'live' allows external
+ * AI. It sits in front of the provider rather than replacing it: the
+ * OpenRouter model ids and the teaching prompt all stay configured exactly as
+ * they are, they are just not used while paused. Setting AI_TUTOR_MODE=live
+ * (with a key) restores normal operation with nothing else to undo.
  *
- * Fail-safe in one direction only: anything other than 'live' or unset means
- * paused. A mistyped value stops AI requests; it can never start them.
+ * Two questions, kept apart on purpose:
+ *   - isAiTutorPaused(): do students get the pause message? Not in the offline
+ *     demo, whose Mock tutor is local and is the point of the demo.
+ *   - isExternalAiAllowed(): may a request leave for an AI provider? Only in
+ *     live mode, and never in the offline demo.
+ *
+ * Fail-safe in one direction only: anything other than 'live' means paused. A
+ * mistyped or missing value stops AI requests; it can never start them.
  */
 
-export type AiTutorMode = 'live' | 'paused';
+export { resolveAiTutorMode, type AiTutorMode } from '../../config/ai-mode.js';
 
 /**
  * The only thing a student is told while the pause is on. Honest that the AI
@@ -23,15 +30,26 @@ export type AiTutorMode = 'live' | 'paused';
 export const AI_PAUSED_MESSAGE =
   "ED's AI tutor is paused for a little while. Your lessons and quizzes still work, so try ED again later.";
 
-/** Pure, so every spelling can be tested. */
-export function resolveAiTutorMode(raw: string | null | undefined): AiTutorMode {
-  const value = (raw ?? '').trim().toLowerCase();
-  return value === '' || value === 'live' ? 'live' : 'paused';
+/**
+ * Whether AI features refuse with the pause message. Read on every call, so a
+ * test can flip it; production sets it once at startup.
+ *
+ * The offline demo is never paused: env validation guarantees it has no key,
+ * so its provider is always the local Mock and nothing can leave the process.
+ */
+export function isAiTutorPaused(): boolean {
+  if (env.OFFLINE_DEMO_AI) return false;
+  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'paused';
 }
 
-/** Read on every call, so a test can flip it; production sets it once at startup. */
-export function isAiTutorPaused(): boolean {
-  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'paused';
+/**
+ * Whether a request may be sent to an external AI provider. The network-level
+ * check: every OpenRouter request method calls it before fetch, so a caller
+ * that skips the service checks is still refused. Read on every call.
+ */
+export function isExternalAiAllowed(): boolean {
+  if (env.OFFLINE_DEMO_AI) return false;
+  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'live';
 }
 
 /** The error a paused AI request is refused with. A 503 carrying only the safe sentence. */

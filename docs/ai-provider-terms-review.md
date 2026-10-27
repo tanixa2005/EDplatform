@@ -160,7 +160,7 @@ Two PDFs, both "last updated 20 August 2026", read in full and linked from OpenR
 
 ## 7. Recommended next steps (safest first)
 
-1. **Pause external AI now.** Merge PR #4 and deploy, then set `AI_TUTOR_MODE=paused`. This stops children's data going to free-tier services while the questions above are open. It costs nothing, adds no service, and is undone by removing the variable. Lessons, quizzes, the local quiz analysis and read-aloud keep working.
+1. **Pause external AI now.** External AI is now off by default: unless `AI_TUTOR_MODE=live` is set, no request goes to any AI provider, and no `OPENROUTER_API_KEY` is needed. This stops children's data going to free-tier services while the questions above are open. It costs nothing, adds no service, and is undone by setting `AI_TUTOR_MODE=live` with a key. Lessons, quizzes, the local quiz analysis and read-aloud keep working.
 2. **Check the account settings without changing them.** In OpenRouter's privacy settings, see whether training and logging are allowed for free models.
 3. **Get a qualified review** of sections 5 and 6, including the applicable children's data law, before resuming AI tutoring for students.
 4. **Keep the fallback allowlist empty** until a model's pricing, terms, privacy practices and suitability for children's data are all verified. A $0 price is not enough.
