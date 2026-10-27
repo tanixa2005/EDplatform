@@ -74,8 +74,16 @@ export interface SpeechInput {
 /**
  * @param onTranscript Called with each FINAL phrase. Never submits anything -
  *   the caller puts it in the composer for the student to check first.
+ * @param options.enabled False means the microphone may not be opened at all:
+ *   `start` does nothing, and a session already listening is released. The
+ *   composer passes false while external AI is off, so no audio leaves the
+ *   device even if a mic button were rendered by mistake. Defaults to true.
  */
-export function useSpeechInput(onTranscript: (text: string) => void): SpeechInput {
+export function useSpeechInput(
+  onTranscript: (text: string) => void,
+  options: { enabled?: boolean } = {}
+): SpeechInput {
+  const enabled = options.enabled ?? true;
   const [supported, setSupported] = useState(false);
   const [state, setState] = useState<ListenState>('idle');
   const [interim, setInterim] = useState('');
@@ -109,6 +117,7 @@ export function useSpeechInput(onTranscript: (text: string) => void): SpeechInpu
   }, []);
 
   const start = useCallback(() => {
+    if (!enabled) return;
     const Recognition = getRecognitionConstructor();
     if (!Recognition) {
       setSupported(false);
@@ -186,7 +195,7 @@ export function useSpeechInput(onTranscript: (text: string) => void): SpeechInpu
       setState((prev) => nextListenState(prev, 'error'));
       setError(recognitionErrorMessage(null));
     }
-  }, [teardown]);
+  }, [enabled, teardown]);
 
   const stop = useCallback(() => {
     const recognition = recognitionRef.current;
@@ -214,6 +223,17 @@ export function useSpeechInput(onTranscript: (text: string) => void): SpeechInpu
     setError(null);
     setState((prev) => nextListenState(prev, 'dismiss'));
   }, []);
+
+  // Losing permission mid-phrase releases the microphone at once, without
+  // keeping what was heard.
+  useEffect(() => {
+    if (enabled) return;
+    if (!recognitionRef.current) return;
+    cancellingRef.current = true;
+    teardown();
+    setInterim('');
+    setState((prev) => nextListenState(prev, 'settled'));
+  }, [enabled, teardown]);
 
   // Leaving the screen must release the microphone. Without this, navigating
   // away mid-phrase leaves it open and the browser indicator lit.

@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import {
   PREFERRED_VOICE_NAME,
   isHighQualityVoice,
+  isOnDeviceVoice,
   isRecognitionSupported,
   isSpeechSupported,
   listenButtonLabel,
@@ -270,34 +271,41 @@ check('Ordered lists keep their numbers and gain a stop', () => {
 });
 
 // ---------------------------------------------------------------- voice selection
+/**
+ * Marks every voice as on-device. Read-aloud uses only on-device voices, so
+ * the ranking checks below run on lists the device synthesises locally; the
+ * on-device rule itself is checked separately further down.
+ */
+const onDevice = (voices: VoiceLike[]): VoiceLike[] => voices.map((v) => ({ ...v, localService: true }));
+
 check('A natural or neural voice wins over a basic one', () => {
-  const voices: VoiceLike[] = [
+  const voices: VoiceLike[] = onDevice([
     { name: 'Microsoft David - English (United States)', lang: 'en-US' },
     { name: 'Microsoft Aria Online (Natural) - English (United States)', lang: 'en-US' },
     { name: 'eSpeak English', lang: 'en' }
-  ];
+  ]);
   const chosen = pickVoice(voices);
   assert.ok(chosen, 'nothing chosen');
   assert.match(chosen!.name, /Natural/, `chose ${chosen!.name}`);
 });
 
 check('English India is preferred when an equally good one exists', () => {
-  const voices: VoiceLike[] = [
+  const voices: VoiceLike[] = onDevice([
     { name: 'Google US English', lang: 'en-US' },
     { name: 'Google UK English Other', lang: 'en-GB' },
     { name: 'Google हिन्दी', lang: 'hi-IN' },
     { name: 'Microsoft Neerja - English (India)', lang: 'en-IN' }
-  ];
+  ]);
   const chosen = pickVoice(voices);
   assert.equal(chosen?.lang, 'en-IN', `chose ${chosen?.name} (${chosen?.lang})`);
 });
 
 check('A quality marker outranks the locale, which is the right trade', () => {
   // A natural en-GB voice is a better experience than a robotic en-IN one.
-  const voices: VoiceLike[] = [
+  const voices: VoiceLike[] = onDevice([
     { name: 'eSpeak English (India)', lang: 'en-IN' },
     { name: 'Microsoft Libby Online (Natural) - English (United Kingdom)', lang: 'en-GB' }
-  ];
+  ]);
   const chosen = pickVoice(voices);
   assert.match(chosen!.name, /Natural/, `chose ${chosen!.name}`);
 });
@@ -305,10 +313,10 @@ check('A quality marker outranks the locale, which is the right trade', () => {
 check('A device with no English voice chooses nothing rather than the wrong one', () => {
   // Reading English with a Hindi or French voice is worse than the engine
   // default, so null has to stay a real outcome.
-  const voices: VoiceLike[] = [
+  const voices: VoiceLike[] = onDevice([
     { name: 'Google हिन्दी', lang: 'hi-IN' },
     { name: 'Thomas', lang: 'fr-FR' }
-  ];
+  ]);
   assert.equal(pickVoice(voices), null);
   assert.equal(pickVoice([]), null);
   assert.equal(pickVoice(null), null);
@@ -318,21 +326,41 @@ check('A device with no English voice chooses nothing rather than the wrong one'
 check('Voice choice never depends on a hardcoded name existing', () => {
   // Whatever the device has, something English is chosen. Nothing is matched
   // by exact name, because the installed set differs on every platform.
-  const oddball: VoiceLike[] = [
+  const oddball: VoiceLike[] = onDevice([
     { name: 'Unknown Voice 7', lang: 'en-ZA' },
     { name: 'Another One', lang: 'en-NZ' }
-  ];
+  ]);
   const chosen = pickVoice(oddball);
   assert.ok(chosen, 'a plausible English voice was rejected');
   assert.ok(chosen!.lang.toLowerCase().startsWith('en'), 'chose a non-English voice');
 });
 
-check('A cloud voice breaks a tie with a local one', () => {
+// ---------------------------------------------------------------- on-device voices only
+check('An on-device voice is chosen over a cloud voice, even a better-scoring one', () => {
+  // A cloud voice sends the text being read to the browser vendor.
   const voices: VoiceLike[] = [
-    { name: 'Alpha English', lang: 'en-IN', localService: true },
-    { name: 'Beta English', lang: 'en-IN', localService: false }
+    { name: 'Microsoft Aria Online (Natural) - English (India)', lang: 'en-IN', localService: false },
+    { name: 'Alpha English', lang: 'en-US', localService: true }
   ];
-  assert.equal(pickVoice(voices)?.name, 'Beta English');
+  assert.equal(pickVoice(voices)?.name, 'Alpha English');
+});
+
+check('A device whose only English voices are cloud voices gets no voice', () => {
+  // Null means read-aloud stays off; the engine default could be a cloud voice too.
+  const voices: VoiceLike[] = [
+    { name: 'Google UK English Female', lang: 'en-GB', localService: false },
+    { name: 'Microsoft Aria Online (Natural) - English (United States)', lang: 'en-US', localService: false },
+    { name: 'Local Hindi', lang: 'hi-IN', localService: true }
+  ];
+  assert.equal(pickVoice(voices), null);
+});
+
+check('A voice that does not report localService counts as cloud (fails closed)', () => {
+  assert.equal(isOnDeviceVoice({ name: 'Mystery English', lang: 'en-GB' }), false);
+  assert.equal(isOnDeviceVoice({ name: 'Cloud English', lang: 'en-GB', localService: false }), false);
+  assert.equal(isOnDeviceVoice({ name: 'Local English', lang: 'en-GB', localService: true }), true);
+  assert.equal(isOnDeviceVoice(null), false);
+  assert.equal(pickVoice([{ name: 'Mystery English', lang: 'en-GB' }]), null);
 });
 
 check('Pacing follows the voice and pitch is never exaggerated', () => {
@@ -450,24 +478,32 @@ check('An unsupported environment reports false for listening too', () => {
 });
 
 // ---------------------------------------------------------------- preferred voice
-check('The preferred Google UK English Female voice wins when the device has it', () => {
+check('The preferred Google UK English Female voice wins when the device has it on-device', () => {
   // Deliberately placed behind better-scoring voices: the choice is made on
   // purpose, so it must beat a natural voice and an en-IN voice alike.
-  const voices: VoiceLike[] = [
+  const voices: VoiceLike[] = onDevice([
     { name: 'Microsoft Aria Online (Natural) - English (United States)', lang: 'en-US' },
     { name: 'Microsoft Neerja - English (India)', lang: 'en-IN' },
     { name: 'Google UK English Female', lang: 'en-GB' },
     { name: 'Google UK English Male', lang: 'en-GB' }
-  ];
+  ]);
   assert.equal(PREFERRED_VOICE_NAME, 'Google UK English Female');
   assert.equal(pickVoice(voices)?.name, 'Google UK English Female');
 });
 
+check('The preferred voice is skipped when it is a cloud voice, as in desktop Chrome', () => {
+  const voices: VoiceLike[] = [
+    { name: 'Google UK English Female', lang: 'en-GB', localService: false },
+    { name: 'Microsoft Hazel - English (United Kingdom)', lang: 'en-GB', localService: true }
+  ];
+  assert.equal(pickVoice(voices)?.name, 'Microsoft Hazel - English (United Kingdom)');
+});
+
 check('The preferred voice wins regardless of the order the device lists voices in', () => {
-  const preferredLast: VoiceLike[] = [
+  const preferredLast: VoiceLike[] = onDevice([
     { name: 'Google US English', lang: 'en-US' },
     { name: 'Google UK English Female', lang: 'en-GB' }
-  ];
+  ]);
   const preferredFirst: VoiceLike[] = [...preferredLast].reverse();
   assert.equal(pickVoice(preferredLast)?.name, 'Google UK English Female');
   assert.equal(pickVoice(preferredFirst)?.name, 'Google UK English Female');
@@ -476,11 +512,11 @@ check('The preferred voice wins regardless of the order the device lists voices 
 check('When the preferred voice is absent, a suitable English voice is still chosen', () => {
   // Another device: the fallback must still be a real English voice, and the
   // best one available - not null, and not a non-English voice.
-  const withoutPreferred: VoiceLike[] = [
+  const withoutPreferred: VoiceLike[] = onDevice([
     { name: 'Microsoft David - English (United States)', lang: 'en-US' },
     { name: 'Microsoft Libby Online (Natural) - English (United Kingdom)', lang: 'en-GB' },
     { name: 'Google हिन्दी', lang: 'hi-IN' }
-  ];
+  ]);
   const chosen = pickVoice(withoutPreferred);
   assert.ok(chosen, 'no fallback was chosen');
   assert.match(chosen!.name, /Natural/, `fallback was ${chosen!.name}`);
@@ -490,11 +526,11 @@ check('When the preferred voice is absent, a suitable English voice is still cho
 check('A near-miss name is not treated as the preferred voice', () => {
   // Exact match only. A different voice that merely looks similar must not
   // hijack the choice - it competes on score like any other.
-  const nearMiss: VoiceLike[] = [
+  const nearMiss: VoiceLike[] = onDevice([
     { name: 'Google UK English Male', lang: 'en-GB' },
     { name: 'google uk english female', lang: 'en-GB' },
     { name: 'Microsoft Aria Online (Natural) - English (United States)', lang: 'en-US' }
-  ];
+  ]);
   const chosen = pickVoice(nearMiss);
   assert.notEqual(chosen?.name, 'Google UK English Female');
   assert.match(chosen!.name, /Natural/, `near-miss won: ${chosen!.name}`);
@@ -503,7 +539,7 @@ check('A near-miss name is not treated as the preferred voice', () => {
 check('A preferred voice that is not English is not used', () => {
   // The guard is applied to the English subset, so a same-named non-English
   // entry cannot make an English reading load a foreign voice.
-  const foreign: VoiceLike[] = [{ name: 'Google UK English Female', lang: 'fr-FR' }];
+  const foreign: VoiceLike[] = onDevice([{ name: 'Google UK English Female', lang: 'fr-FR' }]);
   assert.equal(pickVoice(foreign), null);
 });
 

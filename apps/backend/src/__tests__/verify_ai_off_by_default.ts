@@ -197,6 +197,7 @@ const result = {};
 result.mode = env.AI_TUTOR_MODE;
 result.paused = availability.isAiTutorPaused();
 result.externalAllowed = availability.isExternalAiAllowed();
+result.clientStatus = availability.aiClientStatus();
 result.provider = primaryProvider.name;
 
 result.chat = await outcome((onChunk) => edTutorService.streamTurn(user, 'session-1', { message: 'What is a magnet?' }, onChunk, []));
@@ -232,6 +233,8 @@ const server = createApp().listen(0, '127.0.0.1');
 await new Promise((resolve) => server.once('listening', resolve));
 const res = await fetch('http://127.0.0.1:' + server.address().port + '/api/v1/health');
 result.health = res.status;
+const statusRes = await fetch('http://127.0.0.1:' + server.address().port + '/api/v1/tutor/status');
+result.statusUnauthenticated = statusRes.status;
 server.close();
 
 result.external = external;
@@ -276,6 +279,7 @@ function assertAllBlocked(r: Record<string, any>): void {
   }
   assert.deepEqual(r.external, [], `external requests were attempted: ${r.external.join(', ')}`);
   assert.equal(r.stub, true, 'the offline Prisma stub was not used');
+  assert.deepEqual(r.clientStatus, { tutorPaused: true, voiceInputAllowed: false }, 'the UI would offer AI or the mic');
 }
 
 // ---------------------------------------------------------------- source helpers
@@ -328,6 +332,12 @@ async function runAll(): Promise<void> {
       r.external.some((u: string) => u.startsWith('https://openrouter.ai/')),
       'the recorder saw no OpenRouter attempt in live mode'
     );
+    assert.deepEqual(r.clientStatus, { tutorPaused: false, voiceInputAllowed: true });
+  });
+
+  await check('The UI status endpoint exists, requires sign-in, and is not a public probe', () => {
+    const r = probe('status-route', childEnv({}));
+    assert.equal(r.statusUnauthenticated, 401);
   });
 
   await check('The paused state is logged at startup and no OpenRouter client is created', () => {
@@ -382,6 +392,7 @@ async function runAll(): Promise<void> {
     assert.equal(r.analysis.incorrect, 1);
     assert.equal(r.analysis.feedback, true);
     assert.equal(r.health, 200);
+    assert.deepEqual(r.clientStatus, { tutorPaused: false, voiceInputAllowed: false }, 'the demo would offer the mic');
     assertRefused(r.bypassDirectStream, 'direct OpenRouter stream in demo');
     assertRefused(r.bypassDirectStructured, 'direct OpenRouter structured in demo');
     assert.deepEqual(r.external, [], `external requests were attempted: ${r.external.join(', ')}`);
@@ -392,6 +403,7 @@ async function runAll(): Promise<void> {
     const r = probe('demo-live', demoEnv({ AI_TUTOR_MODE: 'live' }));
     assert.equal(r.provider, 'MockAITutorProvider');
     assert.equal(r.externalAllowed, false);
+    assert.deepEqual(r.clientStatus, { tutorPaused: false, voiceInputAllowed: false });
     assert.equal(r.chat.ok, true);
     assert.deepEqual(r.external, []);
   });

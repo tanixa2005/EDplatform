@@ -330,7 +330,10 @@ export function speakableText(markdown: string | null | undefined): string {
 export interface VoiceLike {
   name: string;
   lang: string;
-  /** False for a cloud voice, which on most platforms is the better one. */
+  /**
+   * True for a voice synthesised on the device. False for a cloud voice, whose
+   * text is sent to the browser vendor. Missing is treated as cloud.
+   */
   localService?: boolean;
   default?: boolean;
 }
@@ -353,21 +356,35 @@ const LOW_QUALITY_MARKERS = ['espeak', 'compact', 'eloquence', 'pico'];
 const LANG_PREFERENCE = ['en-in', 'en-gb', 'en-au', 'en-us'];
 
 /**
- * A voice a student has chosen by name, preferred whenever the device has it.
+ * A voice a student has chosen by name, preferred whenever the device has it
+ * as an on-device voice.
  *
  * Checked before any scoring, because a choice someone made on purpose should
  * not be second-guessed by a heuristic. Exact and case-sensitive: it matches
- * the name the browser reports, and a near-miss is a different voice. Absent
- * on another device, selection falls through to the normal scoring unchanged.
+ * the name the browser reports, and a near-miss is a different voice. In
+ * desktop Chrome this voice is a cloud voice, so it is skipped there; absent
+ * as an on-device voice, selection falls through to the normal scoring.
  */
 export const PREFERRED_VOICE_NAME = 'Google UK English Female';
 
 /**
- * Picks the best available English voice, or null if there is none.
+ * Whether a voice is synthesised on the device.
  *
- * Null is a real outcome and must stay one: on a device with no English voice
- * installed, letting the engine fall back to, say, a Hindi voice reading
- * English text is worse than leaving the default alone.
+ * Read-aloud uses only these. A cloud voice (desktop Chrome's "Google ..."
+ * voices, Edge's "Online (Natural)" ones) sends the text being read to the
+ * browser vendor, and that text is a child's lesson or question. Fails closed:
+ * a browser that does not report `localService` gets no voice.
+ */
+export function isOnDeviceVoice(voice: VoiceLike | null | undefined): boolean {
+  return voice?.localService === true;
+}
+
+/**
+ * Picks the best on-device English voice, or null if there is none.
+ *
+ * Null is a real outcome and must stay one, and it means "do not speak": on a
+ * device with no on-device English voice, the engine's own default might be a
+ * cloud voice, or one built for another language reading English text.
  *
  * Nothing here is a quality guarantee. It is a preference order over whatever
  * the device happens to have, which is the most any client-side synthesiser
@@ -377,7 +394,10 @@ export function pickVoice(voices: VoiceLike[] | null | undefined): VoiceLike | n
   if (!voices || voices.length === 0) return null;
 
   const english = voices.filter(
-    (voice) => typeof voice?.lang === 'string' && voice.lang.toLowerCase().startsWith('en')
+    (voice) =>
+      typeof voice?.lang === 'string' &&
+      voice.lang.toLowerCase().startsWith('en') &&
+      isOnDeviceVoice(voice)
   );
   if (english.length === 0) return null;
 
@@ -398,8 +418,6 @@ export function pickVoice(voices: VoiceLike[] | null | undefined): VoiceLike | n
     const langIndex = LANG_PREFERENCE.indexOf(lang);
     score += langIndex === -1 ? 2 : (LANG_PREFERENCE.length - langIndex) * 6;
 
-    // A cloud voice is usually the better-sounding one.
-    if (voice.localService === false) score += 5;
     if (voice.default) score += 1;
 
     if (score > bestScore) {

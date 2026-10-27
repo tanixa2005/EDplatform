@@ -52,6 +52,19 @@ export function isExternalAiAllowed(): boolean {
   return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'live';
 }
 
+/**
+ * What the frontend is told about AI, as flags only: no key, no model id.
+ *
+ * `voiceInputAllowed` follows the network rule, not the pause: browser speech
+ * recognition sends the student's audio to the browser vendor's speech
+ * service, so the mic is offered only when external AI is allowed. That keeps
+ * it hidden in the offline demo too, where the tutor answers but nothing may
+ * leave the device.
+ */
+export function aiClientStatus(): { tutorPaused: boolean; voiceInputAllowed: boolean } {
+  return { tutorPaused: isAiTutorPaused(), voiceInputAllowed: isExternalAiAllowed() };
+}
+
 /** The error a paused AI request is refused with. A 503 carrying only the safe sentence. */
 export function aiPausedError(): ServiceUnavailableError {
   return new ServiceUnavailableError(AI_PAUSED_MESSAGE, 'AI_TUTOR_PAUSED');

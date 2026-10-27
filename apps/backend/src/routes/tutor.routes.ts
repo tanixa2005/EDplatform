@@ -6,6 +6,11 @@ import { uploadTutorImage } from '../middlewares/upload.middleware.js';
 
 export const tutorRouter = Router();
 
+// AI availability flags for the UI: tutor paused, voice input allowed. No DB read.
+tutorRouter.get('/status', authenticate, (req, res, next) => {
+  tutorController.getStatus(req, res, next);
+});
+
 // Home screen context: class, recent sessions, starter prompts.
 tutorRouter.get('/home', authenticate, (req, res, next) => {
   tutorController.getHome(req, res, next);

@@ -9,8 +9,9 @@
     "start": "next start -p 3000",
     "pretypecheck": "npm run build --workspace=@edplatform/shared",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/__tests__/verify_theme.ts && tsx src/__tests__/verify_sse_stream.ts && tsx src/__tests__/verify_speech.ts && tsx src/__tests__/verify_route_access.ts",
+    "test": "tsx src/__tests__/verify_theme.ts && tsx src/__tests__/verify_sse_stream.ts && tsx src/__tests__/verify_speech.ts && tsx src/__tests__/verify_route_access.ts && tsx src/__tests__/verify_ai_status.ts",
     "test:route-access": "tsx src/__tests__/verify_route_access.ts",
+    "test:ai-status": "tsx src/__tests__/verify_ai_status.ts",
     "lint": "next lint"
   },
   "dependencies": {

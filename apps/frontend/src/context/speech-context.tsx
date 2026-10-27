@@ -12,7 +12,11 @@ import {
 } from '@/lib/speech';
 
 interface SpeechContextValue {
-  /** False on browsers with no Web Speech API; the button hides itself. */
+  /**
+   * True only once an on-device English voice has been chosen. False on
+   * browsers with no Web Speech API, before the voice list arrives, and on
+   * devices whose only English voices are cloud voices; the button hides itself.
+   */
   supported: boolean;
   /** Which answer is currently loaded, so only that one shows controls. */
   activeId: string | null;
@@ -53,18 +57,12 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   /**
-   * The chosen voice, or null to let the engine use its default.
+   * The chosen on-device voice, or null, which means read-aloud is off.
    *
-   * A ref rather than state: `play` reads it, and re-rendering every answer's
-   * button because the voice list arrived would be pointless churn.
+   * A ref so `play` always reads the latest choice; `supported` mirrors
+   * whether there is one, so the buttons appear only when they can work.
    */
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
-
-  // Feature detection runs in an effect so the server and the first client
-  // render agree, and hydration does not mismatch.
-  useEffect(() => {
-    setSupported(isSpeechSupported());
-  }, []);
 
   /**
    * Voice selection, which is asynchronous whether you like it or not.
@@ -73,11 +71,14 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
    * is populated later and announced with `voiceschanged`. Picking once at
    * mount therefore gets nothing on exactly the browsers most students use,
    * which is why this listens as well as reads, and re-picks each time the
-   * list changes.
+   * list changes. It runs in an effect, so the server and the first client
+   * render agree and hydration does not mismatch.
    *
-   * Everything is wrapped: a browser that throws from getVoices still has
-   * working text tutoring, and the engine's own default voice is a fine
-   * outcome.
+   * Only on-device voices are used (see pickVoice): a cloud voice would send
+   * the text being read to the browser vendor. With none, read-aloud stays
+   * off rather than falling back to the engine default, which may itself be
+   * a cloud voice. Everything is wrapped: a browser that throws from
+   * getVoices still has working text tutoring.
    */
   useEffect(() => {
     if (!isSpeechSupported()) return;
@@ -87,13 +88,11 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
         const available = window.speechSynthesis.getVoices();
         if (!available || available.length === 0) return;
         const chosen = pickVoice(available as unknown as VoiceLike[]);
-        // Null means no English voice at all. Leaving the engine default
-        // alone beats reading English with a voice built for another
-        // language.
         voiceRef.current = chosen ? (chosen as unknown as SpeechSynthesisVoice) : null;
       } catch {
         voiceRef.current = null;
       }
+      setSupported(voiceRef.current !== null);
     };
 
     choose();
@@ -138,6 +137,11 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     (id: string, markdown: string) => {
       if (!isSpeechSupported()) return;
 
+      // No on-device voice, no speech: the engine default could be a cloud
+      // voice. The button is hidden in this case; this guards it anyway.
+      const voice = voiceRef.current;
+      if (!voice) return;
+
       const text = speakableText(markdown);
       // Nothing to say: leave the state alone rather than entering a
       // "speaking" state that will never end.
@@ -149,19 +153,11 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const utterance = new window.SpeechSynthesisUtterance(text);
-        const voice = voiceRef.current;
-
-        // Only set a voice when one was actually chosen. Assigning null here
-        // is not the same as leaving it alone on every engine.
-        if (voice) {
-          utterance.voice = voice;
-          // Match the language to the voice rather than asserting en-IN over
-          // the top of, say, an en-GB voice - a mismatch makes some engines
-          // fall back to a worse voice or ignore the choice entirely.
-          utterance.lang = voice.lang;
-        } else {
-          utterance.lang = 'en-IN';
-        }
+        utterance.voice = voice;
+        // Match the language to the voice rather than asserting en-IN over
+        // the top of, say, an en-GB voice - a mismatch makes some engines
+        // fall back to a worse voice or ignore the choice entirely.
+        utterance.lang = voice.lang;
 
         // Pace follows the engine's quality; pitch stays at 1 always, because
         // moving it is what makes a synthesiser sound like a cartoon.
