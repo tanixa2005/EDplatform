@@ -10,6 +10,7 @@ import { tutorSessionService } from '../services/tutor/tutor-session.service.js'
 import { AppError, UnauthorizedError } from '../errors/app.error.js';
 import { validateAndSanitiseImage } from '../services/ai/image-validation.service.js';
 import type { TutorImage } from '../services/ai/ai-provider.interface.js';
+import { aiClientStatus } from '../services/ai/ai-availability.js';
 
 /**
  * The only text allowed into an SSE error frame.
@@ -26,6 +27,16 @@ function safeStreamErrorMessage(err: unknown, context: string): string {
 }
 
 export class TutorController {
+  /** GET /api/v1/tutor/status - whether the tutor is paused and voice input is allowed. Flags only. */
+  async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new UnauthorizedError('Not authenticated');
+      res.status(200).json({ success: true, data: aiClientStatus() });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** GET /api/v1/tutor/home - class, recent sessions and starter prompts. */
   async getHome(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

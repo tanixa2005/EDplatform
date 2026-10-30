@@ -1,3 +1,4 @@
+import './support/ai-live-mode.js';
 import http from 'http';
 import { CLASS_COURSE_SLUGS, textbookForCourseSlug } from '@edplatform/shared';
 import { createApp } from '../app.js';
@@ -10222,8 +10223,11 @@ async function runTests() {
 
     const { envSchema: configSchema } = await import('../config/env.config.js');
     const SCHEMA_TEST_VALUE = 'schema-test-placeholder-not-a-credential';
+    // The key requirement applies to live mode only (AI is off by default);
+    // verify_ai_off_by_default.ts covers production starting without a key.
     const PRODUCTION_BASE = {
       NODE_ENV: 'production',
+      AI_TUTOR_MODE: 'live',
       JWT_SECRET: 'x'.repeat(48),
       DATABASE_URL: 'postgresql://placeholder@placeholder.invalid/edplatform?sslmode=require'
     };

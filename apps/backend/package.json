@@ -33,6 +33,9 @@
     "test:demo-entry-guard": "tsx src/__tests__/verify_demo_entry_guard.ts",
     "test:auth-middleware": "tsx src/__tests__/verify_auth_middleware.ts",
     "test:webhook-handler": "tsx src/__tests__/verify_webhook_handler.ts",
+    "test:openrouter-errors": "tsx src/__tests__/verify_openrouter_errors.ts",
+    "test:ai-pause": "tsx src/__tests__/verify_ai_pause.ts",
+    "test:ai-off": "tsx src/__tests__/verify_ai_off_by_default.ts",
     "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
     "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
     "predb:seed:lessons": "node scripts/db-guard.mjs --print",
@@ -49,6 +52,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.8.7",
     "argon2": "^0.45.1",
     "cookie-parser": "^1.4.7",
@@ -65,7 +69,6 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/multer": "^2.3.0",
     "tsx": "^4.19.2"
   }
 }

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, ImagePlus, Loader2, Mic, Square, X } from 'lucide-react';
 import { useSpeech } from '@/context/speech-context';
+import { isVoiceInputAllowed, useAiStatus } from '@/lib/ai-status';
 import { listenButtonLabel, mergeTranscript } from '@/lib/speech';
 import { useSpeechInput } from '@/lib/use-speech-input';
 
@@ -88,11 +89,17 @@ export function AskBar({
     });
   }, []);
 
-  const listen = useSpeechInput(handleTranscript);
+  // Voice input sends the student's audio to the browser vendor's speech
+  // service, so it is offered only while external AI is live. Until the
+  // backend says so - and if it cannot be asked - there is no mic.
+  const voiceAllowed = isVoiceInputAllowed(useAiStatus());
+
+  const listen = useSpeechInput(handleTranscript, { enabled: voiceAllowed });
   const isListening = listen.state === 'listening';
   const isFinishing = listen.state === 'processing';
 
   function toggleListening() {
+    if (!voiceAllowed) return;
     if (isListening) {
       listen.stop();
       return;
@@ -258,28 +265,31 @@ export function AskBar({
             <ImagePlus className="h-5 w-5" />
           </button>
 
-          {/* 2. Voice - push to talk. Press once to listen, again to stop. */}
-          <button
-            type="button"
-            onClick={toggleListening}
-            disabled={disabled || isFinishing}
-            aria-label={listenButtonLabel(listen.state, listen.supported)}
-            title={listenButtonLabel(listen.state, listen.supported)}
-            aria-pressed={isListening}
-            className={
-              isListening
-                ? 'flex h-10 w-10 items-center justify-center rounded-xl bg-notyet-soft text-notyet-ink transition-colors'
-                : 'flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40'
-            }
-          >
-            {isFinishing ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : isListening ? (
-              <Square className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <Mic className="h-5 w-5" aria-hidden="true" />
-            )}
-          </button>
+          {/* 2. Voice - push to talk. Press once to listen, again to stop.
+              Not rendered at all while external AI is off. */}
+          {voiceAllowed && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={disabled || isFinishing}
+              aria-label={listenButtonLabel(listen.state, listen.supported)}
+              title={listenButtonLabel(listen.state, listen.supported)}
+              aria-pressed={isListening}
+              className={
+                isListening
+                  ? 'flex h-10 w-10 items-center justify-center rounded-xl bg-notyet-soft text-notyet-ink transition-colors'
+                  : 'flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40'
+              }
+            >
+              {isFinishing ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              ) : isListening ? (
+                <Square className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Mic className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          )}
 
           {/* 3. Send */}
           <button

@@ -8,6 +8,7 @@ import { prisma } from '../../config/prisma.config.js';
 import { BadRequestError, ServiceUnavailableError } from '../../errors/app.error.js';
 import type { AIMessage } from '../ai/ai-provider.interface.js';
 import type { TutorImage } from '../ai/ai-provider.interface.js';
+import { aiPausedError, isAiTutorPaused } from '../ai/ai-availability.js';
 import { devDiagnosticSuffix } from '../ai/failure-diagnostics.js';
 import { primaryProvider, streamWithFallback } from '../ai/provider.factory.js';
 import { studentProfileService } from '../student-profile.service.js';
@@ -76,6 +77,11 @@ export class EdTutorService {
      */
     images: TutorImage[] = []
   ): Promise<TutorTurnResult> {
+    // The pause comes first: before the session is read, before the student's
+    // message is stored and before any provider is touched. A paused turn
+    // leaves nothing behind - no unanswered question in the transcript.
+    if (isAiTutorPaused()) throw aiPausedError();
+
     const session = await tutorSessionService.getOwnedSession(sessionId, user.id);
     const profile = await studentProfileService.getProfile(user.id);
 

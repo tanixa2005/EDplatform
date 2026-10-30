@@ -1,24 +1,41 @@
 import { env } from '../../config/env.config.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
+import { aiPausedError, isAiTutorPaused, isExternalAiAllowed } from './ai-availability.js';
+import { DisabledAITutorProvider } from './disabled.provider.js';
 import { MockAITutorProvider } from './mock.provider.js';
 import { failureCategory, providerFailureDiagnostic } from './failure-diagnostics.js';
+import type { OpenRouterFailureDetails } from './openrouter-failure.js';
 import { OpenRouterAITutorProvider } from './openrouter.provider.js';
 
 /**
  * Single shared provider pair for every AI feature.
  *
- * Centralising it keeps one client (and one connection pool) per process, and
- * selects the Mock provider when OPENROUTER_API_KEY is unset - which is what
- * lets the app run and be tested with no API key.
+ * Centralising it keeps one client (and one connection pool) per process.
  *
- * This is the one place that decides which vendor is live. The Gemini provider
- * was removed from that decision here; every caller reaches a provider only
- * through `primaryProvider`, so nothing else needed to change.
+ * This is the one place that decides which vendor is live, in this order:
+ *   1. the offline demo always gets the Mock (env validation refuses a key there);
+ *   2. while external AI is not allowed (AI_TUTOR_MODE is not 'live', the
+ *      default) the disabled provider, so the OpenRouter client is never
+ *      created even when a key is present;
+ *   3. live with a key: OpenRouter;
+ *   4. live with no key (local development): the Mock.
+ *
+ * The Gemini provider was removed from that decision here; every caller
+ * reaches a provider only through `primaryProvider`.
  */
 export const mockProvider = new MockAITutorProvider();
 
 export const primaryProvider: IAITutorProvider = (() => {
+  if (env.OFFLINE_DEMO_AI) {
+    // Explicit and opt-in. Logged as a demo so it is never mistaken for live tutoring.
+    console.log('🤖 AI provider: OFFLINE DEMO (Mock; no AI requests are made)');
+    return mockProvider;
+  }
+  if (!isExternalAiAllowed()) {
+    console.log('🤖 AI provider: disabled (AI_TUTOR_MODE is not live; no external AI client is created)');
+    return new DisabledAITutorProvider();
+  }
   if (env.OPENROUTER_API_KEY && env.OPENROUTER_API_KEY.trim() !== '') {
     // Model ids only, never the key.
     console.log(
@@ -31,17 +48,17 @@ export const primaryProvider: IAITutorProvider = (() => {
       env.OPENROUTER_VISION_MODEL
     );
   }
-  if (env.OFFLINE_DEMO_AI) {
-    // Explicit and opt-in. Logged as a demo so it is never mistaken for live tutoring.
-    console.log('🤖 AI provider: OFFLINE DEMO (Mock; no AI requests are made)');
-    return mockProvider;
-  }
   console.log('🤖 AI provider: Mock (OPENROUTER_API_KEY not set)');
   return mockProvider;
 })();
 
-/** True when this process has no real provider at all - local dev with no key. */
+/** True when the Mock answers - local dev with no key, or the offline demo. */
 export const isOfflineProvider = primaryProvider.name === mockProvider.name;
+
+if (isAiTutorPaused()) {
+  // Logged at startup so the state of production is visible in one line.
+  console.log('🤖 AI tutor: PAUSED by AI_TUTOR_MODE - no external AI requests will be made');
+}
 
 /**
  * Retry policy, in one place rather than scattered through the call sites.
@@ -67,7 +84,25 @@ export const AI_RETRY = {
    * failure exhausts the budget on its first attempt and is reported instead
    * of being tried again.
    */
-  totalBudgetMs: 60_000
+  totalBudgetMs: 60_000,
+  /**
+   * Backoff for a 429 specifically.
+   *
+   * The ordinary 400ms/800ms schedule suits a 503 spike, but against a rate
+   * limit it spent all three attempts inside 1.7 seconds - inside the very
+   * window that refused the first one. A throttled free model needs seconds,
+   * not milliseconds: 2s then 4s, or the provider's own Retry-After when it
+   * gives one.
+   */
+  rateLimitBaseDelayMs: 2_000,
+  /**
+   * The longest wait honoured for one 429 retry. A Retry-After beyond this is
+   * not waited out: the student would sit through it only to be refused again
+   * at the next limit, so the honest message comes sooner instead.
+   */
+  rateLimitMaxDelayMs: 8_000,
+  /** A wait longer than this is a quota, not a burst, and is never retried. */
+  longLivedQuotaMs: 120_000
 } as const;
 
 /**
@@ -123,10 +158,41 @@ export function isTransientProviderError(err: unknown): boolean {
  * times just makes a child wait longer for the same refusal.
  */
 function isLongLivedQuotaError(err: unknown): boolean {
+  // What the OpenRouter provider parsed from the response, when it has it.
+  const details = rateLimitDetails(err);
+  if (details) {
+    if (details.reason === 'daily_quota') return true;
+    if (details.retryAfterMs !== null && details.retryAfterMs > AI_RETRY.longLivedQuotaMs) return true;
+  }
+
   const text = errorText(err);
   const retryDelay = text.match(/"retryDelay"\s*:\s*"(\d+)s"/);
-  if (retryDelay && Number(retryDelay[1]) > 120) return true;
+  if (retryDelay && Number(retryDelay[1]) * 1000 > AI_RETRY.longLivedQuotaMs) return true;
   return /PerDay|per[-\s]day|daily limit|free-models-per-day/i.test(text);
+}
+
+/** The parsed rate-limit facts the OpenRouter provider attaches to a failure. */
+function rateLimitDetails(err: unknown): OpenRouterFailureDetails | null {
+  const details = (err as { rateLimit?: unknown } | null)?.rateLimit;
+  return details && typeof details === 'object' ? (details as OpenRouterFailureDetails) : null;
+}
+
+/**
+ * How long to wait before the next attempt, or null when waiting cannot help.
+ *
+ * A 429 gets its own, slower schedule (see AI_RETRY.rateLimitBaseDelayMs) and
+ * honours the provider's Retry-After when it is short enough to sit through.
+ * Everything else keeps the original fast schedule.
+ */
+export function retryDelayMs(err: unknown, attempt: number): number | null {
+  if (extractStatus(err) !== 429) return backoffDelayMs(attempt);
+
+  const hinted = rateLimitDetails(err)?.retryAfterMs ?? null;
+  if (hinted !== null) {
+    if (hinted > AI_RETRY.rateLimitMaxDelayMs) return null;
+    return Math.max(hinted, AI_RETRY.baseDelayMs);
+  }
+  return Math.min(AI_RETRY.rateLimitBaseDelayMs * 2 ** (attempt - 1), AI_RETRY.rateLimitMaxDelayMs);
 }
 
 function extractStatus(err: unknown): number | null {
@@ -210,24 +276,35 @@ export function createLeadingWhitespaceTrimmer(): (chunk: string) => string {
  * The retry decision, as a pure function so every branch can be tested without
  * waiting out a real timeout.
  *
- * Four independent reasons not to try again:
+ * Five independent reasons not to try again:
  *   - the failure is permanent (a bad key, a retired model, an exhausted
  *     daily allowance): the same request will fail the same way;
  *   - text already reached the student: a retry would print the answer twice;
  *   - attempts are used up;
  *   - the student has already waited longer than the whole operation's budget,
- *     so starting over would be worse than an honest failure.
+ *     or the wait before the next attempt would carry them past it, so
+ *     starting over would be worse than an honest failure;
+ *   - the provider asked for a longer wait than a student should sit through
+ *     (`nextDelayMs` is null).
+ *
+ * `nextDelayMs` is optional so a caller that does not know the delay gets the
+ * original four rules unchanged.
  */
 export function shouldRetryProviderCall(state: {
   transient: boolean;
   emittedAnything: boolean;
   attempt: number;
   elapsedMs: number;
+  nextDelayMs?: number | null;
 }): { retry: boolean; reason: string } {
   if (!state.transient) return { retry: false, reason: 'permanent' };
   if (state.emittedAnything) return { retry: false, reason: 'already-streamed' };
   if (state.attempt >= AI_RETRY.maxAttempts) return { retry: false, reason: 'attempts-exhausted' };
   if (state.elapsedMs >= AI_RETRY.totalBudgetMs) return { retry: false, reason: 'budget-exhausted' };
+  if (state.nextDelayMs === null) return { retry: false, reason: 'wait-too-long' };
+  if (state.nextDelayMs !== undefined && state.elapsedMs + state.nextDelayMs >= AI_RETRY.totalBudgetMs) {
+    return { retry: false, reason: 'budget-exhausted' };
+  }
   return { retry: true, reason: 'transient' };
 }
 
@@ -239,6 +316,11 @@ function emptyStreamError(): Error {
 }
 
 export async function streamWithFallback(params: StreamParams): Promise<string> {
+  // Every streamed AI feature - tutor turns, photo questions, quiz hints -
+  // passes through here, so this one check covers them all even if a caller
+  // forgets its own. Nothing is sent and the retry loop never starts.
+  if (isAiTutorPaused()) throw aiPausedError();
+
   // No special case for the offline provider. When the Mock IS the configured
   // provider it simply never throws, so this path behaves identically for it -
   // and keeping one code path means the retry and failure behaviour is the
@@ -281,23 +363,26 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
       const transient = isTransientProviderError(err);
       const status = extractStatus(err);
       const elapsedMs = Date.now() - startedAt;
+      const nextDelayMs = retryDelayMs(err, attempt);
       const { retry, reason } = shouldRetryProviderCall({
         transient,
         emittedAnything,
         attempt,
-        elapsedMs
+        elapsedMs,
+        nextDelayMs
       });
 
       console.error(
         `[AI] ${primaryProvider.name} attempt ${attempt}/${AI_RETRY.maxAttempts} failed ` +
           `(status=${status ?? 'none'}, category=${failureCategory(err)}, transient=${transient}, ` +
           `partial=${emittedAnything}, ` +
-          `elapsed=${elapsedMs}ms, retry=${retry}/${reason}): ` +
+          `elapsed=${elapsedMs}ms, retry=${retry}/${reason}` +
+          `${retry ? `, next_in=${nextDelayMs}ms` : ''}): ` +
           errorText(err)
       );
 
       if (!retry) break;
-      await sleep(backoffDelayMs(attempt));
+      await sleep(nextDelayMs ?? backoffDelayMs(attempt));
     }
   }
 
