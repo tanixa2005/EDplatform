@@ -356,16 +356,21 @@ const LOW_QUALITY_MARKERS = ['espeak', 'compact', 'eloquence', 'pico'];
 const LANG_PREFERENCE = ['en-in', 'en-gb', 'en-au', 'en-us'];
 
 /**
- * A voice a student has chosen by name, preferred whenever the device has it
+ * Voices chosen by name, in order, each preferred whenever the device has it
  * as an on-device voice.
  *
  * Checked before any scoring, because a choice someone made on purpose should
- * not be second-guessed by a heuristic. Exact and case-sensitive: it matches
+ * not be second-guessed by a heuristic. Exact and case-sensitive: each matches
  * the name the browser reports, and a near-miss is a different voice. In
- * desktop Chrome this voice is a cloud voice, so it is skipped there; absent
- * as an on-device voice, selection falls through to the normal scoring.
+ * desktop Chrome "Google UK English Female" is a cloud voice, so it is skipped
+ * there and the on-device Windows voices Heera, then Zira, are used instead.
+ * With none of them on-device, selection falls through to the normal scoring.
  */
-export const PREFERRED_VOICE_NAME = 'Google UK English Female';
+export const PREFERRED_VOICE_NAMES = [
+  'Google UK English Female',
+  'Microsoft Heera - English (India)',
+  'Microsoft Zira - English (United States)'
+] as const;
 
 /**
  * Whether a voice is synthesised on the device.
@@ -401,8 +406,10 @@ export function pickVoice(voices: VoiceLike[] | null | undefined): VoiceLike | n
   );
   if (english.length === 0) return null;
 
-  const preferred = english.find((voice) => voice.name === PREFERRED_VOICE_NAME);
-  if (preferred) return preferred;
+  for (const name of PREFERRED_VOICE_NAMES) {
+    const preferred = english.find((voice) => voice.name === name);
+    if (preferred) return preferred;
+  }
 
   let best: VoiceLike | null = null;
   let bestScore = -Infinity;
