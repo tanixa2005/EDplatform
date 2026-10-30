@@ -332,7 +332,7 @@ export interface VoiceLike {
   lang: string;
   /**
    * True for a voice synthesised on the device. False for a cloud voice, whose
-   * text is sent to the browser vendor. Missing is treated as cloud.
+   * text is sent to the browser vendor. Not used to choose the read-aloud voice.
    */
   localService?: boolean;
   default?: boolean;
@@ -352,88 +352,34 @@ const QUALITY_MARKERS = ['natural', 'neural', 'enhanced', 'premium', 'wavenet', 
 /** Names that indicate an old formant synthesiser - the robotic ones. */
 const LOW_QUALITY_MARKERS = ['espeak', 'compact', 'eloquence', 'pico'];
 
-/** English locales in order of fit for this product. */
-const LANG_PREFERENCE = ['en-in', 'en-gb', 'en-au', 'en-us'];
+/**
+ * The one voice read-aloud uses, chosen by the project owner.
+ *
+ * In desktop Chrome this is a cloud voice: the text being read is sent to
+ * Google's speech service. That was accepted for read-aloud only; it does not
+ * extend to speech input, which stays behind the external-AI gate.
+ */
+export const READ_ALOUD_VOICE = { name: 'Google UK English Female', lang: 'en-GB' } as const;
 
 /**
- * Voices chosen by name, in order, each preferred whenever the device has it
- * as an on-device voice.
- *
- * Checked before any scoring, because a choice someone made on purpose should
- * not be second-guessed by a heuristic. Exact and case-sensitive: each matches
- * the name the browser reports, and a near-miss is a different voice. In
- * desktop Chrome "Google UK English Female" is a cloud voice, so it is skipped
- * there and the on-device Windows voices Heera, then Zira, are used instead.
- * With none of them on-device, selection falls through to the normal scoring.
+ * Whether a voice is the read-aloud voice: exact, case-sensitive name and
+ * en-GB, whether it is on the device or in the cloud. A near-miss name or a
+ * different locale is a different voice.
  */
-export const PREFERRED_VOICE_NAMES = [
-  'Google UK English Female',
-  'Microsoft Heera - English (India)',
-  'Microsoft Zira - English (United States)'
-] as const;
-
-/**
- * Whether a voice is synthesised on the device.
- *
- * Read-aloud uses only these. A cloud voice (desktop Chrome's "Google ..."
- * voices, Edge's "Online (Natural)" ones) sends the text being read to the
- * browser vendor, and that text is a child's lesson or question. Fails closed:
- * a browser that does not report `localService` gets no voice.
- */
-export function isOnDeviceVoice(voice: VoiceLike | null | undefined): boolean {
-  return voice?.localService === true;
+export function isReadAloudVoice(voice: VoiceLike | null | undefined): boolean {
+  if (!voice || voice.name !== READ_ALOUD_VOICE.name || typeof voice.lang !== 'string') return false;
+  return voice.lang.toLowerCase().replace('_', '-') === READ_ALOUD_VOICE.lang.toLowerCase();
 }
 
 /**
- * Picks the best on-device English voice, or null if there is none.
+ * Picks the read-aloud voice, or null if the browser does not offer it.
  *
- * Null is a real outcome and must stay one, and it means "do not speak": on a
- * device with no on-device English voice, the engine's own default might be a
- * cloud voice, or one built for another language reading English text.
- *
- * Nothing here is a quality guarantee. It is a preference order over whatever
- * the device happens to have, which is the most any client-side synthesiser
- * can offer.
+ * There is no fallback to another voice or to the engine default. Null means
+ * "do not speak", and the provider tells the student the voice is unavailable.
  */
 export function pickVoice(voices: VoiceLike[] | null | undefined): VoiceLike | null {
   if (!voices || voices.length === 0) return null;
-
-  const english = voices.filter(
-    (voice) =>
-      typeof voice?.lang === 'string' &&
-      voice.lang.toLowerCase().startsWith('en') &&
-      isOnDeviceVoice(voice)
-  );
-  if (english.length === 0) return null;
-
-  for (const name of PREFERRED_VOICE_NAMES) {
-    const preferred = english.find((voice) => voice.name === name);
-    if (preferred) return preferred;
-  }
-
-  let best: VoiceLike | null = null;
-  let bestScore = -Infinity;
-
-  for (const voice of english) {
-    const name = (voice.name ?? '').toLowerCase();
-    const lang = voice.lang.toLowerCase().replace('_', '-');
-    let score = 0;
-
-    if (QUALITY_MARKERS.some((marker) => name.includes(marker))) score += 40;
-    if (LOW_QUALITY_MARKERS.some((marker) => name.includes(marker))) score -= 40;
-
-    const langIndex = LANG_PREFERENCE.indexOf(lang);
-    score += langIndex === -1 ? 2 : (LANG_PREFERENCE.length - langIndex) * 6;
-
-    if (voice.default) score += 1;
-
-    if (score > bestScore) {
-      bestScore = score;
-      best = voice;
-    }
-  }
-
-  return best;
+  return voices.find((voice) => isReadAloudVoice(voice)) ?? null;
 }
 
 /** Whether a voice's name suggests a modern engine. Drives pacing only. */

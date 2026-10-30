@@ -13,11 +13,16 @@ import {
 
 interface SpeechContextValue {
   /**
-   * True only once an on-device English voice has been chosen. False on
-   * browsers with no Web Speech API, before the voice list arrives, and on
-   * devices whose only English voices are cloud voices; the button hides itself.
+   * True only once the read-aloud voice (Google UK English Female) has been
+   * found. False on browsers with no Web Speech API, before the voice list
+   * arrives, and on browsers that do not offer that voice.
    */
   supported: boolean;
+  /**
+   * True when the browser can speak but, after waiting for its voice list, does
+   * not offer the read-aloud voice. The button then says so instead of hiding.
+   */
+  voiceUnavailable: boolean;
   /** Which answer is currently loaded, so only that one shows controls. */
   activeId: string | null;
   state: SpeechState;
@@ -29,6 +34,12 @@ interface SpeechContextValue {
 }
 
 const SpeechContext = createContext<SpeechContextValue | undefined>(undefined);
+
+/**
+ * How long to wait for the browser's voice list before saying the read-aloud
+ * voice is unavailable. Chrome loads its Google voices after the page starts.
+ */
+const VOICE_WAIT_MS = 3000;
 
 /**
  * One speech controller for the whole app.
@@ -44,6 +55,7 @@ const SpeechContext = createContext<SpeechContextValue | undefined>(undefined);
  */
 export function SpeechProvider({ children }: { children: React.ReactNode }) {
   const [supported, setSupported] = useState(false);
+  const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [state, setState] = useState<SpeechState>('idle');
 
@@ -57,7 +69,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   /**
-   * The chosen on-device voice, or null, which means read-aloud is off.
+   * The read-aloud voice, or null, which means read-aloud is off.
    *
    * A ref so `play` always reads the latest choice; `supported` mirrors
    * whether there is one, so the buttons appear only when they can work.
@@ -74,34 +86,43 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
    * list changes. It runs in an effect, so the server and the first client
    * render agree and hydration does not mismatch.
    *
-   * Only on-device voices are used (see pickVoice): a cloud voice would send
-   * the text being read to the browser vendor. With none, read-aloud stays
-   * off rather than falling back to the engine default, which may itself be
-   * a cloud voice. Everything is wrapped: a browser that throws from
+   * Only Google UK English Female is used (see pickVoice), never another
+   * voice or the engine default. Until VOICE_WAIT_MS has passed, a list
+   * without it counts as still loading; after that, the student is told the
+   * voice is unavailable, and a later voiceschanged that brings it still
+   * switches read-aloud on. Everything is wrapped: a browser that throws from
    * getVoices still has working text tutoring.
    */
   useEffect(() => {
     if (!isSpeechSupported()) return;
 
+    let waited = false;
+
     const choose = () => {
       try {
         const available = window.speechSynthesis.getVoices();
-        if (!available || available.length === 0) return;
-        const chosen = pickVoice(available as unknown as VoiceLike[]);
+        const chosen = pickVoice((available ?? []) as unknown as VoiceLike[]);
         voiceRef.current = chosen ? (chosen as unknown as SpeechSynthesisVoice) : null;
       } catch {
         voiceRef.current = null;
       }
       setSupported(voiceRef.current !== null);
+      setVoiceUnavailable(waited && voiceRef.current === null);
     };
+
+    const timer = window.setTimeout(() => {
+      waited = true;
+      choose();
+    }, VOICE_WAIT_MS);
 
     choose();
     try {
       window.speechSynthesis.addEventListener('voiceschanged', choose);
     } catch {
-      return;
+      return () => window.clearTimeout(timer);
     }
     return () => {
+      window.clearTimeout(timer);
       try {
         window.speechSynthesis.removeEventListener('voiceschanged', choose);
       } catch {
@@ -137,8 +158,8 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
     (id: string, markdown: string) => {
       if (!isSpeechSupported()) return;
 
-      // No on-device voice, no speech: the engine default could be a cloud
-      // voice. The button is hidden in this case; this guards it anyway.
+      // Without the read-aloud voice, no speech: never another voice or the
+      // engine default. The button cannot play in this case; this guards it anyway.
       const voice = voiceRef.current;
       if (!voice) return;
 
@@ -218,7 +239,7 @@ export function SpeechProvider({ children }: { children: React.ReactNode }) {
   }, [hardStop]);
 
   return (
-    <SpeechContext.Provider value={{ supported, activeId, state, play, pause, resume, stop }}>
+    <SpeechContext.Provider value={{ supported, voiceUnavailable, activeId, state, play, pause, resume, stop }}>
       {children}
     </SpeechContext.Provider>
   );

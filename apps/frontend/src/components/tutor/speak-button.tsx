@@ -1,9 +1,11 @@
 'use client';
 
 import React from 'react';
-import { Pause, Play, Square, Volume2 } from 'lucide-react';
+import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
 import { useSpeech } from '@/context/speech-context';
-import { speakableText, speechButtonLabel } from '@/lib/speech';
+import { READ_ALOUD_VOICE, speakableText, speechButtonLabel } from '@/lib/speech';
+
+const UNAVAILABLE_MESSAGE = `Read-aloud needs the ${READ_ALOUD_VOICE.name} voice, which this browser does not offer. Try Google Chrome.`;
 
 interface SpeakButtonProps {
   /** Stable id for this answer, so only the playing one shows controls. */
@@ -18,17 +20,35 @@ interface SpeakButtonProps {
  * Renders nothing at all when the browser has no Web Speech API, or when the
  * answer has no speakable words left after the Markdown and LaTeX are
  * stripped. A control that does nothing when pressed is worse than no control.
+ * When the browser can speak but does not offer the read-aloud voice, it shows
+ * a short "Voice unavailable" note instead of switching to another voice.
  *
  * Sized for a thumb (36px targets) and built from the same role tokens as the
  * rest of the UI, so it follows light and dark without knowing which is on.
  */
 export function SpeakButton({ id, content }: SpeakButtonProps) {
-  const { supported, activeId, state, play, pause, resume, stop } = useSpeech();
+  const { supported, voiceUnavailable, activeId, state, play, pause, resume, stop } = useSpeech();
 
   const isActive = activeId === id && state !== 'idle';
   const speakable = React.useMemo(() => speakableText(content), [content]);
 
-  if (!supported || speakable.length === 0) return null;
+  if (speakable.length === 0) return null;
+
+  if (voiceUnavailable) {
+    return (
+      <span
+        className="flex h-9 items-center gap-1 px-1 text-xs text-muted-foreground"
+        title={UNAVAILABLE_MESSAGE}
+        aria-label={UNAVAILABLE_MESSAGE}
+        role="note"
+      >
+        <VolumeX className="h-4 w-4" aria-hidden="true" />
+        <span aria-hidden="true">Voice unavailable</span>
+      </span>
+    );
+  }
+
+  if (!supported) return null;
 
   const base =
     'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
