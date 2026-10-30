@@ -14,7 +14,7 @@
  */
 import assert from 'node:assert/strict';
 import {
-  PREFERRED_VOICE_NAME,
+  PREFERRED_VOICE_NAMES,
   isHighQualityVoice,
   isOnDeviceVoice,
   isRecognitionSupported,
@@ -487,8 +487,40 @@ check('The preferred Google UK English Female voice wins when the device has it 
     { name: 'Google UK English Female', lang: 'en-GB' },
     { name: 'Google UK English Male', lang: 'en-GB' }
   ]);
-  assert.equal(PREFERRED_VOICE_NAME, 'Google UK English Female');
+  assert.equal(PREFERRED_VOICE_NAMES[0], 'Google UK English Female');
   assert.equal(pickVoice(voices)?.name, 'Google UK English Female');
+});
+
+check('With Google UK English Female cloud-only, on-device Heera beats Ravi and Zira', () => {
+  // The Windows voice set: Ravi and Heera tie on score, so without a preference
+  // the first one listed won, which was often the male voice.
+  const voices: VoiceLike[] = [
+    { name: 'Google UK English Female', lang: 'en-GB', localService: false },
+    ...onDevice([
+      { name: 'Microsoft David - English (United States)', lang: 'en-US', default: true },
+      { name: 'Microsoft Ravi - English (India)', lang: 'en-IN' },
+      { name: 'Microsoft Zira - English (United States)', lang: 'en-US' },
+      { name: 'Microsoft Heera - English (India)', lang: 'en-IN' }
+    ])
+  ];
+  assert.equal(pickVoice(voices)?.name, 'Microsoft Heera - English (India)');
+});
+
+check('Without Heera, on-device Zira is used before scoring', () => {
+  const voices: VoiceLike[] = onDevice([
+    { name: 'Microsoft Ravi - English (India)', lang: 'en-IN' },
+    { name: 'Microsoft Zira - English (United States)', lang: 'en-US' }
+  ]);
+  assert.equal(pickVoice(voices)?.name, 'Microsoft Zira - English (United States)');
+});
+
+check('A preferred Windows voice reported as cloud is never used', () => {
+  const voices: VoiceLike[] = [
+    { name: 'Microsoft Heera - English (India)', lang: 'en-IN', localService: false },
+    { name: 'Microsoft Zira - English (United States)', lang: 'en-US' },
+    { name: 'Microsoft Ravi - English (India)', lang: 'en-IN', localService: true }
+  ];
+  assert.equal(pickVoice(voices)?.name, 'Microsoft Ravi - English (India)');
 });
 
 check('The preferred voice is skipped when it is a cloud voice, as in desktop Chrome', () => {
