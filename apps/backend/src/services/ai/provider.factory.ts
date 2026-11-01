@@ -1,7 +1,7 @@
 import { env } from '../../config/env.config.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
-import { aiPausedError, isAiTutorPaused, isExternalAiAllowed } from './ai-availability.js';
+import { aiPausedError, isAiTutorPaused, isExternalAiAllowed, isMockTutorMode } from './ai-availability.js';
 import { DisabledAITutorProvider } from './disabled.provider.js';
 import { MockAITutorProvider } from './mock.provider.js';
 import { failureCategory, providerFailureDiagnostic } from './failure-diagnostics.js';
@@ -15,11 +15,13 @@ import { OpenRouterAITutorProvider } from './openrouter.provider.js';
  *
  * This is the one place that decides which vendor is live, in this order:
  *   1. the offline demo always gets the Mock (env validation refuses a key there);
- *   2. while external AI is not allowed (AI_TUTOR_MODE is not 'live', the
+ *   2. AI_TUTOR_MODE=mock gets the Mock, and the OpenRouter client is never
+ *      created even when a key is present;
+ *   3. while external AI is not allowed (AI_TUTOR_MODE is not 'live', the
  *      default) the disabled provider, so the OpenRouter client is never
  *      created even when a key is present;
- *   3. live with a key: OpenRouter;
- *   4. live with no key (local development): the Mock.
+ *   4. live with a key: OpenRouter;
+ *   5. live with no key (local development): the Mock.
  *
  * The Gemini provider was removed from that decision here; every caller
  * reaches a provider only through `primaryProvider`.
@@ -30,6 +32,10 @@ export const primaryProvider: IAITutorProvider = (() => {
   if (env.OFFLINE_DEMO_AI) {
     // Explicit and opt-in. Logged as a demo so it is never mistaken for live tutoring.
     console.log('🤖 AI provider: OFFLINE DEMO (Mock; no AI requests are made)');
+    return mockProvider;
+  }
+  if (isMockTutorMode()) {
+    console.log('🤖 AI provider: Mock (AI_TUTOR_MODE is mock; no AI requests are made)');
     return mockProvider;
   }
   if (!isExternalAiAllowed()) {

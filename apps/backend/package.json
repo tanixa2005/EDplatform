@@ -36,6 +36,7 @@
     "test:openrouter-errors": "tsx src/__tests__/verify_openrouter_errors.ts",
     "test:ai-pause": "tsx src/__tests__/verify_ai_pause.ts",
     "test:ai-off": "tsx src/__tests__/verify_ai_off_by_default.ts",
+    "test:ai-mock": "tsx src/__tests__/verify_ai_mock_mode.ts",
     "predb:seed:curriculum": "node scripts/db-guard.mjs --print",
     "db:seed:curriculum": "tsx prisma/seed-curriculum.ts",
     "predb:seed:lessons": "node scripts/db-guard.mjs --print",

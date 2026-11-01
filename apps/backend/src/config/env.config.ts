@@ -73,6 +73,10 @@ export const envSchema = z
      * anything is stored or sent, quiz analysis uses the local, non-AI version,
      * and the OpenRouter client is never created.
      *
+     * 'mock' answers tutor turns, photo questions and quiz hints with the local
+     * Mock tutor instead, labelled as an offline demo response. External AI
+     * stays off exactly as when paused, and no key is needed or used.
+     *
      * A free string rather than an enum on purpose: a typo must pause the AI,
      * never stop the whole server from starting. See config/ai-mode.ts.
      */
