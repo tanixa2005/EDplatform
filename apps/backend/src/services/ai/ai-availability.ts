@@ -13,9 +13,10 @@ import { ServiceUnavailableError } from '../../errors/app.error.js';
  *
  * Two questions, kept apart on purpose:
  *   - isAiTutorPaused(): do students get the pause message? Not in the offline
- *     demo, whose Mock tutor is local and is the point of the demo.
+ *     demo, whose Mock tutor is local and is the point of the demo, and not in
+ *     mock mode, which runs that same local Mock on the main deployment.
  *   - isExternalAiAllowed(): may a request leave for an AI provider? Only in
- *     live mode, and never in the offline demo.
+ *     live mode, and never in the offline demo or mock mode.
  *
  * Fail-safe in one direction only: anything other than 'live' means paused. A
  * mistyped or missing value stops AI requests; it can never start them.
@@ -50,6 +51,19 @@ export function isAiTutorPaused(): boolean {
 export function isExternalAiAllowed(): boolean {
   if (env.OFFLINE_DEMO_AI) return false;
   return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'live';
+}
+
+/**
+ * Whether AI_TUTOR_MODE=mock: the tutor answers with the local Mock and no
+ * request can leave for an AI provider, even when a key is configured. Read on
+ * every call.
+ *
+ * Unlike the offline demo, this runs against the main database, so a Mock
+ * answer must never be stored as if an AI had written it (see quiz analysis).
+ */
+export function isMockTutorMode(): boolean {
+  if (env.OFFLINE_DEMO_AI) return false;
+  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'mock';
 }
 
 /**

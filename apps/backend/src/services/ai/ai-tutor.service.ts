@@ -14,7 +14,7 @@ import {
   BadRequestError,
 } from '../../errors/app.error.js';
 import type { CurriculumMeta, StreamMeta } from './ai-provider.interface.js';
-import { isAiTutorPaused } from './ai-availability.js';
+import { isAiTutorPaused, isMockTutorMode } from './ai-availability.js';
 import { primaryProvider, streamWithFallback } from './provider.factory.js';
 import { quizService } from '../quiz.service.js';
 import { studentProfileService } from '../student-profile.service.js';
@@ -453,7 +453,12 @@ export class AITutorService {
     // submission check above, and before the stored analysis below. While
     // paused the student gets only the local, non-AI analysis - a stored AI
     // analysis is not served - and nothing is written.
-    const aiPaused = isAiTutorPaused();
+    //
+    // Mock mode is treated the same way. The Mock's structured answer IS the
+    // local analysis, so the student sees no difference, but caching it here
+    // would store it in the main database as if an AI had written it, and it
+    // would be served as one once live AI returned.
+    const aiPaused = isAiTutorPaused() || isMockTutorMode();
 
     // Already analysed? Reuse it (not while paused - see above).
     //
@@ -654,7 +659,7 @@ Explanation: ${q.explanation || 'None provided'}
     // analysis is never stored as this attempt's permanent result and the
     // pause writes nothing to the database.
     if (aiPaused) {
-      console.log('[AI] quiz analysis served locally: AI_TUTOR_MODE is paused');
+      console.log(`[AI] quiz analysis served locally: AI_TUTOR_MODE is ${isMockTutorMode() ? 'mock' : 'paused'}`);
       return fallbackGenerator();
     }
 
