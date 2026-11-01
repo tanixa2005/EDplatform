@@ -17,6 +17,7 @@ import {
   buildTutorSystemPrompt,
   detectImplicitAction
 } from './prompt-builder.service.js';
+import { boundHistory } from './history-budget.js';
 import { resolveSessionCurriculum } from './session-curriculum.service.js';
 import { tutorSessionService } from './tutor-session.service.js';
 
@@ -168,10 +169,14 @@ export class EdTutorService {
       action
     });
 
-    const providerHistory: AIMessage[] = history.map((message) => ({
-      role: message.role === 'STUDENT' ? 'user' : 'model',
-      text: message.content
-    }));
+    // Bounded by size as well as count, so a long conversation does not resend
+    // thousands of tokens of old explanations on every turn.
+    const providerHistory: AIMessage[] = boundHistory(
+      history.map((message) => ({
+        role: message.role === 'STUDENT' ? 'user' : 'model',
+        text: message.content
+      }))
+    );
 
     let reply = '';
 
@@ -200,7 +205,14 @@ export class EdTutorService {
       // A photo turn that fails says so in photo terms. There is deliberately
       // no fallback here: the text model is never handed the image, and no
       // answer is produced that could be read as being about the picture.
-      if (hasImage && err instanceof ServiceUnavailableError) {
+      // A used-up quota or a pause is not a photo problem, and keeps its own
+      // message rather than "try again in a moment".
+      if (
+        hasImage &&
+        err instanceof ServiceUnavailableError &&
+        err.code !== 'AI_QUOTA_EXHAUSTED' &&
+        err.code !== 'AI_TUTOR_PAUSED'
+      ) {
         const diagnostic = (err as { diagnostic?: string }).diagnostic ?? null;
         throw new ServiceUnavailableError(
           IMAGE_UNAVAILABLE_MESSAGE + devDiagnosticSuffix(diagnostic, env.NODE_ENV),

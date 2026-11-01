@@ -9,6 +9,7 @@ import { edTutorService } from '../services/tutor/ed-tutor.service.js';
 import { tutorSessionService } from '../services/tutor/tutor-session.service.js';
 import { AppError, UnauthorizedError } from '../errors/app.error.js';
 import { validateAndSanitiseImage } from '../services/ai/image-validation.service.js';
+import { aiBusyError, tryAcquireAiSlot } from '../services/ai/ai-request-guard.js';
 import type { TutorImage } from '../services/ai/ai-provider.interface.js';
 import { aiClientStatus } from '../services/ai/ai-availability.js';
 
@@ -115,6 +116,7 @@ export class TutorController {
    *   data: [DONE]            end of turn
    */
   async streamTurn(req: Request, res: Response, next: NextFunction): Promise<void> {
+    let releaseSlot: (() => void) | null = null;
     try {
       if (!req.user) throw new UnauthorizedError('Not authenticated');
 
@@ -133,6 +135,13 @@ export class TutorController {
       // Fail before the stream opens so real errors arrive as proper HTTP status
       // codes the client can act on, rather than as an SSE error frame.
       await tutorSessionService.getOwnedSession(sessionId, req.user.id);
+
+      // One turn at a time per session. A second request while ED is still
+      // answering is refused here - after ownership is proven, before the
+      // photo is processed, before anything is stored and before any AI call -
+      // so a double-click can never become two generations.
+      releaseSlot = tryAcquireAiSlot(`tutor-session:${sessionId}`);
+      if (!releaseSlot) throw aiBusyError();
 
       // Validate and strip the photo BEFORE a single token is spent. An invalid
       // image must never reach the model, and must never cost a generation.
@@ -186,6 +195,8 @@ export class TutorController {
       } else {
         next(error);
       }
+    } finally {
+      releaseSlot?.();
     }
   }
 }

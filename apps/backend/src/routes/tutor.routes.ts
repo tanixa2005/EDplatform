@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { tutorController } from '../controllers/tutor.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
-import { aiRateLimiter } from '../middlewares/rate-limit.middleware.js';
+import { withAiAudience } from '../middlewares/ai-audience.middleware.js';
+import { aiDailyRateLimiter, aiRateLimiter } from '../middlewares/rate-limit.middleware.js';
 import { uploadTutorImage } from '../middlewares/upload.middleware.js';
 
 export const tutorRouter = Router();
 
 // AI availability flags for the UI: tutor paused, voice input allowed. No DB read.
-tutorRouter.get('/status', authenticate, (req, res, next) => {
+tutorRouter.get('/status', authenticate, withAiAudience, (req, res, next) => {
   tutorController.getStatus(req, res, next);
 });
 
@@ -41,7 +42,11 @@ tutorRouter.post(
   '/sessions/:sessionId/stream',
   authenticate,
   aiRateLimiter,
+  aiDailyRateLimiter,
   uploadTutorImage,
+  // Last, right before the handler, so the audience is set in the same async
+  // context the handler runs in (multipart parsing is event-driven).
+  withAiAudience,
   (req, res, next) => {
     tutorController.streamTurn(req, res, next);
   }

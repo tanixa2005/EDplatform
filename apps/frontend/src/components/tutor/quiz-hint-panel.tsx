@@ -45,11 +45,14 @@ export function QuizHintPanel({ isOpen, onClose, questionId }: QuizHintPanelProp
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Set synchronously, so a double-click inside one render cannot ask twice.
+  const askingRef = useRef(false);
 
   const isStreaming = streaming !== null;
 
   async function ask(message: string) {
-    if (isStreaming || !questionId) return;
+    if (isStreaming || askingRef.current || !questionId) return;
+    askingRef.current = true;
 
     setTurns((prev) => [...prev, { role: 'student', text: message }]);
     setStreaming('');
@@ -73,6 +76,7 @@ export function QuizHintPanel({ isOpen, onClose, questionId }: QuizHintPanelProp
     } finally {
       abortRef.current = null;
       setStreaming(null);
+      askingRef.current = false;
     }
   }
 

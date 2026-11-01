@@ -1,6 +1,7 @@
 import { env } from '../../config/env.config.js';
 import { resolveAiTutorMode } from '../../config/ai-mode.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
+import { isCurrentAudienceAllowed } from './ai-audience.js';
 
 /**
  * Whether ED may contact an external AI provider at all.
@@ -40,17 +41,30 @@ export const AI_PAUSED_MESSAGE =
  */
 export function isAiTutorPaused(): boolean {
   if (env.OFFLINE_DEMO_AI) return false;
-  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'paused';
+  const mode = resolveAiTutorMode(env.AI_TUTOR_MODE);
+  if (mode === 'live' && isGeminiAudienceRefused()) return true;
+  return mode === 'paused';
 }
 
 /**
  * Whether a request may be sent to an external AI provider. The network-level
- * check: every OpenRouter request method calls it before fetch, so a caller
- * that skips the service checks is still refused. Read on every call.
+ * check: every OpenRouter and Gemini request method calls it before sending,
+ * so a caller that skips the service checks is still refused. Read on every call.
  */
 export function isExternalAiAllowed(): boolean {
   if (env.OFFLINE_DEMO_AI) return false;
-  return resolveAiTutorMode(env.AI_TUTOR_MODE) === 'live';
+  if (resolveAiTutorMode(env.AI_TUTOR_MODE) !== 'live') return false;
+  return !isGeminiAudienceRefused();
+}
+
+/**
+ * Live Gemini is for the adult accounts in AI_LIVE_ALLOWED_EMAILS only (see
+ * ai-audience.ts): for anyone else, and outside a request, live mode behaves
+ * as paused. Only AI_PROVIDER=gemini is gated.
+ */
+function isGeminiAudienceRefused(): boolean {
+  if (env.AI_PROVIDER !== 'gemini') return false;
+  return !isCurrentAudienceAllowed(env.AI_LIVE_ALLOWED_EMAILS);
 }
 
 /**

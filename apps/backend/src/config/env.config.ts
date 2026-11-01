@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 import { DEFAULT_AI_TUTOR_MODE, resolveAiTutorMode } from './ai-mode.js';
 import { parseAllowedOrigins } from './cors-origins.js';
+import { DEFAULT_GEMINI_MODEL, GEMINI_MODELS, isSupportedGeminiModel } from './gemini-models.js';
 import { offlineDemoProblems } from './offline-demo.js';
 
 // Load .env file
@@ -82,10 +83,36 @@ export const envSchema = z
      */
     AI_TUTOR_MODE: z.string().optional().default(DEFAULT_AI_TUTOR_MODE),
 
-    // DEPRECATED, kept only so an existing .env with these still parses. The
-    // Gemini provider is no longer selectable; nothing reads these values.
+    /**
+     * Which AI vendor is live. Explicit on purpose: a key being present never
+     * selects a provider by itself, and one provider never stands in for the
+     * other when it fails (see resolveProviderChoice in provider.factory.ts).
+     *
+     *   unset        - unchanged legacy behaviour: OpenRouter when
+     *                  OPENROUTER_API_KEY is set, otherwise the Mock. A stale
+     *                  GEMINI_API_KEY alone selects nothing.
+     *   'openrouter' - OpenRouter only.
+     *   'gemini'     - the direct Gemini API only (GEMINI_API_KEY, GEMINI_MODEL).
+     *                  OpenRouter is never constructed or called.
+     *
+     * NOTE: Google's Gemini API terms restrict use in services directed at, or
+     * likely to be accessed by, people under 18. 'gemini' must not be set for
+     * real student traffic until that is resolved - see
+     * docs/ai-provider-terms-review.md.
+     */
+    AI_PROVIDER: z.enum(['openrouter', 'gemini']).optional(),
+
+    // The direct Gemini API. Read only on the server, only by the factory, and
+    // only when AI_PROVIDER is 'gemini'. The key is never logged or echoed.
     GEMINI_API_KEY: z.string().optional().default(''),
-    GEMINI_MODEL: z.string().optional().default('gemini-3.6-flash'),
+    // A Gemini model from the allowlist in gemini-models.ts. Anything else -
+    // a Gemma model, a 2.5 model, a TTS or image variant - refuses startup when
+    // AI_PROVIDER is 'gemini'.
+    GEMINI_MODEL: z.string().optional().default(DEFAULT_GEMINI_MODEL),
+    // The adult accounts (comma-separated emails) that live Gemini is served
+    // to. Everyone else is answered as when paused. Empty means nobody - see
+    // services/ai/ai-audience.ts. Not a secret, but never sent to the client.
+    AI_LIVE_ALLOWED_EMAILS: z.string().optional().default(''),
 
     // Clerk. Optional so the app still boots (and builds) without them during
     // the migration; requests then fall back to the legacy JWT cookie.
@@ -98,10 +125,28 @@ export const envSchema = z
     OFFLINE_DEMO_EXPECT_ENDPOINT: z.string().optional().default('')
   })
   .superRefine((data, ctx) => {
+    // In every environment: a Gemini selection must name an allowlisted Gemini
+    // model, so a Gemma or unsupported id is refused rather than sent.
+    if (data.AI_PROVIDER === 'gemini' && !isSupportedGeminiModel(data.GEMINI_MODEL)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GEMINI_MODEL'],
+        message: `GEMINI_MODEL must be one of: ${Object.keys(GEMINI_MODELS).join(', ')}`
+      });
+    }
+
     if (data.OFFLINE_DEMO_AI) {
       // Fails closed: every problem refuses startup, and no message contains a value.
       for (const message of offlineDemoProblems(data)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['OFFLINE_DEMO_AI'], message });
+      }
+      // The demo never makes AI requests, so a provider choice is a mistake.
+      if (data.AI_PROVIDER === 'gemini') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['AI_PROVIDER'],
+          message: 'OFFLINE_DEMO_AI=true must not be combined with AI_PROVIDER=gemini'
+        });
       }
     }
 
@@ -114,11 +159,17 @@ export const envSchema = z
       // provider, which refuses honestly and never touches the network.
       // The offline demo is the other exception, and it is only accepted by
       // offlineDemoProblems above, which refuses any key and any other database.
-      if (
-        resolveAiTutorMode(data.AI_TUTOR_MODE) === 'live' &&
-        data.OPENROUTER_API_KEY.trim() === '' &&
-        !data.OFFLINE_DEMO_AI
-      ) {
+      const liveMode = resolveAiTutorMode(data.AI_TUTOR_MODE) === 'live' && !data.OFFLINE_DEMO_AI;
+      if (liveMode && data.AI_PROVIDER === 'gemini') {
+        if (data.GEMINI_API_KEY.trim() === '') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['GEMINI_API_KEY'],
+            message:
+              'GEMINI_API_KEY is required in production when AI_PROVIDER=gemini. Without it the app would serve canned Mock replies to students. Set it in the host environment and restart.'
+          });
+        }
+      } else if (liveMode && data.OPENROUTER_API_KEY.trim() === '') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['OPENROUTER_API_KEY'],

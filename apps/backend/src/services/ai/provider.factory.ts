@@ -1,32 +1,60 @@
 import { env } from '../../config/env.config.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
-import { aiPausedError, isAiTutorPaused, isExternalAiAllowed, isMockTutorMode } from './ai-availability.js';
+import { aiPausedError, isAiTutorPaused, isMockTutorMode } from './ai-availability.js';
+import { parseAllowedEmails } from './ai-audience.js';
+import { resolveAiTutorMode } from '../../config/ai-mode.js';
 import { DisabledAITutorProvider } from './disabled.provider.js';
 import { MockAITutorProvider } from './mock.provider.js';
 import { failureCategory, providerFailureDiagnostic } from './failure-diagnostics.js';
-import type { OpenRouterFailureDetails } from './openrouter-failure.js';
+import { GeminiAITutorProvider } from './gemini.provider.js';
 import { OpenRouterAITutorProvider } from './openrouter.provider.js';
 
 /**
- * Single shared provider pair for every AI feature.
+ * Single shared provider for every AI feature.
  *
  * Centralising it keeps one client (and one connection pool) per process.
  *
  * This is the one place that decides which vendor is live, in this order:
  *   1. the offline demo always gets the Mock (env validation refuses a key there);
- *   2. AI_TUTOR_MODE=mock gets the Mock, and the OpenRouter client is never
- *      created even when a key is present;
+ *   2. AI_TUTOR_MODE=mock gets the Mock, and no external client is created
+ *      even when a key is present;
  *   3. while external AI is not allowed (AI_TUTOR_MODE is not 'live', the
- *      default) the disabled provider, so the OpenRouter client is never
- *      created even when a key is present;
- *   4. live with a key: OpenRouter;
- *   5. live with no key (local development): the Mock.
+ *      default) the disabled provider, so no external client is created even
+ *      when a key is present;
+ *   4. live: the vendor resolveProviderChoice names (Gemini only when
+ *      AI_PROVIDER=gemini), or the Mock when that vendor has no key.
  *
- * The Gemini provider was removed from that decision here; every caller
+ * Every caller reaches a provider only through `primaryProvider`.
  * reaches a provider only through `primaryProvider`.
  */
 export const mockProvider = new MockAITutorProvider();
+
+export type ProviderChoice = 'openrouter' | 'gemini' | 'mock' | 'offline-demo';
+
+/**
+ * Which provider to build, as a pure function so every combination is tested.
+ *
+ * Exactly one vendor is ever live, and only the one AI_PROVIDER names:
+ *   - AI_PROVIDER=gemini   -> Gemini, or the Mock without a key. An
+ *     OPENROUTER_API_KEY that is also set is ignored: OpenRouter is not built,
+ *     so it cannot be called, and nothing switches to it when Gemini fails.
+ *   - AI_PROVIDER=openrouter -> OpenRouter, or the Mock without a key.
+ *   - unset -> the behaviour before AI_PROVIDER existed: OpenRouter when its
+ *     key is set, otherwise the Mock. A leftover GEMINI_API_KEY selects nothing.
+ * The offline demo always gets the Mock (env.config refuses demo + gemini).
+ */
+export function resolveProviderChoice(config: {
+  AI_PROVIDER?: 'openrouter' | 'gemini';
+  OPENROUTER_API_KEY: string;
+  GEMINI_API_KEY: string;
+  OFFLINE_DEMO_AI: boolean;
+}): ProviderChoice {
+  const has = (key: string) => key.trim() !== '';
+  if (config.OFFLINE_DEMO_AI && !has(config.OPENROUTER_API_KEY)) return 'offline-demo';
+  if (config.AI_PROVIDER === 'gemini') return has(config.GEMINI_API_KEY) ? 'gemini' : 'mock';
+  return has(config.OPENROUTER_API_KEY) ? 'openrouter' : 'mock';
+}
 
 export const primaryProvider: IAITutorProvider = (() => {
   if (env.OFFLINE_DEMO_AI) {
@@ -38,12 +66,19 @@ export const primaryProvider: IAITutorProvider = (() => {
     console.log('🤖 AI provider: Mock (AI_TUTOR_MODE is mock; no AI requests are made)');
     return mockProvider;
   }
-  if (!isExternalAiAllowed()) {
+  // The mode alone, not isExternalAiAllowed(): at startup there is no request
+  // audience, and the adult-only Gemini gate is applied per request instead.
+  if (resolveAiTutorMode(env.AI_TUTOR_MODE) !== 'live') {
     console.log('🤖 AI provider: disabled (AI_TUTOR_MODE is not live; no external AI client is created)');
     return new DisabledAITutorProvider();
   }
-  if (env.OPENROUTER_API_KEY && env.OPENROUTER_API_KEY.trim() !== '') {
-    // Model ids only, never the key.
+  const choice = resolveProviderChoice(env);
+  // Model ids only, never a key.
+  if (choice === 'gemini') {
+    console.log(`🤖 AI provider: Gemini API (${env.GEMINI_MODEL}), photos: supported`);
+    return new GeminiAITutorProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL);
+  }
+  if (choice === 'openrouter') {
     console.log(
       `🤖 AI provider: OpenRouter (${env.OPENROUTER_MODEL}), photos: ` +
         `${env.OPENROUTER_VISION_MODEL.trim() === '' ? 'not supported - no vision route configured' : env.OPENROUTER_VISION_MODEL}`
@@ -54,16 +89,22 @@ export const primaryProvider: IAITutorProvider = (() => {
       env.OPENROUTER_VISION_MODEL
     );
   }
-  console.log('🤖 AI provider: Mock (OPENROUTER_API_KEY not set)');
+  console.log(
+    `🤖 AI provider: Mock (${env.AI_PROVIDER === 'gemini' ? 'GEMINI_API_KEY' : 'OPENROUTER_API_KEY'} not set)`
+  );
   return mockProvider;
 })();
 
 /** True when the Mock answers - local dev with no key, or the offline demo. */
 export const isOfflineProvider = primaryProvider.name === mockProvider.name;
 
-if (isAiTutorPaused()) {
+if (resolveAiTutorMode(env.AI_TUTOR_MODE) === 'paused' && !env.OFFLINE_DEMO_AI) {
   // Logged at startup so the state of production is visible in one line.
   console.log('🤖 AI tutor: PAUSED by AI_TUTOR_MODE - no external AI requests will be made');
+} else if (primaryProvider.name === 'GeminiAITutorProvider') {
+  // A count only: the allowlisted emails are never logged.
+  const allowed = parseAllowedEmails(env.AI_LIVE_ALLOWED_EMAILS).size;
+  console.log(`🤖 AI tutor: live Gemini for ${allowed} allowlisted adult account(s); everyone else is paused`);
 }
 
 /**
@@ -119,6 +160,13 @@ export const AI_RETRY = {
  */
 export const AI_UNAVAILABLE_MESSAGE =
   'ED is having trouble connecting right now. Try again in a moment.';
+
+/**
+ * What a student is told when the free AI quota is used up. Same rules as
+ * above: no vendor, no numbers - just what happened and what still works.
+ */
+export const AI_QUOTA_MESSAGE =
+  "ED has answered all the questions it can for now. Your lessons and quizzes still work, so try ED again later.";
 
 /**
  * Whether an error is worth trying again.
@@ -177,10 +225,30 @@ function isLongLivedQuotaError(err: unknown): boolean {
   return /PerDay|per[-\s]day|daily limit|free-models-per-day/i.test(text);
 }
 
-/** The parsed rate-limit facts the OpenRouter provider attaches to a failure. */
-function rateLimitDetails(err: unknown): OpenRouterFailureDetails | null {
+/** The rate-limit facts a provider attaches to a failure: a fixed reason label and a wait. */
+interface RateLimitFacts {
+  reason: string;
+  retryAfterMs: number | null;
+}
+
+/** The parsed rate-limit facts either provider attaches to a failure. */
+function rateLimitDetails(err: unknown): RateLimitFacts | null {
   const details = (err as { rateLimit?: unknown } | null)?.rateLimit;
-  return details && typeof details === 'object' ? (details as OpenRouterFailureDetails) : null;
+  return details && typeof details === 'object' ? (details as RateLimitFacts) : null;
+}
+
+/**
+ * Whether a failure means our own quota is used up, as opposed to an outage.
+ *
+ * A direct Gemini 429 is always our project's quota. Through OpenRouter only
+ * the account's own per-day and per-minute limits count; an upstream throttle
+ * is the provider's capacity, not ours, and keeps the ordinary message.
+ */
+export function isQuotaExhaustion(err: unknown): boolean {
+  if (extractStatus(err) !== 429) return false;
+  if ((err as { quotaExhausted?: unknown } | null)?.quotaExhausted === true) return true;
+  const reason = rateLimitDetails(err)?.reason;
+  return reason === 'daily_quota' || reason === 'per_minute_limit';
 }
 
 /**
@@ -398,7 +466,15 @@ export async function streamWithFallback(params: StreamParams): Promise<string> 
   // a diagnostic, so the photo path can show it to a developer and the text
   // path simply ignores it.
   const kind = params.images && params.images.length > 0 ? 'photo' : 'text';
-  throw Object.assign(new ServiceUnavailableError(AI_UNAVAILABLE_MESSAGE, 'AI_PROVIDER_UNAVAILABLE'), {
-    diagnostic: providerFailureDiagnostic(lastError, kind)
-  });
+  // Quota exhaustion gets its own honest sentence: "try again in a moment"
+  // would send the student straight back into the same refusal. No other
+  // provider is tried - when the free quota is gone, ED waits.
+  const quota = isQuotaExhaustion(lastError);
+  throw Object.assign(
+    new ServiceUnavailableError(
+      quota ? AI_QUOTA_MESSAGE : AI_UNAVAILABLE_MESSAGE,
+      quota ? 'AI_QUOTA_EXHAUSTED' : 'AI_PROVIDER_UNAVAILABLE'
+    ),
+    { diagnostic: providerFailureDiagnostic(lastError, kind) }
+  );
 }
