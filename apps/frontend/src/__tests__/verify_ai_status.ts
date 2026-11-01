@@ -1,15 +1,16 @@
 /**
- * Voice input and read-aloud stay on the device while external AI is off.
+ * Voice input stays off while external AI is off, and read-aloud uses only the
+ * one voice the project owner approved (Google UK English Female).
  *
  * Two kinds of check, neither needing a browser:
  *   - the pure rule that decides whether the mic may be shown, which must fail
  *     closed on anything but an explicit yes from the backend;
  *   - source tripwires on the composer, the speech-input hook and the speech
  *     provider, so a later edit cannot quietly bring back an always-visible
- *     mic or a fallback to the engine's default (possibly cloud) voice.
+ *     mic, another read-aloud voice, or a fallback to the engine's default.
  *
- * What this cannot cover - that a given browser reports `localService`
- * truthfully, or how the composer looks - is a limitation, not a pass.
+ * What this cannot cover - which voices a given browser offers, or how the
+ * composer looks - is a limitation, not a pass.
  *
  * Run: npx tsx src/__tests__/verify_ai_status.ts
  */
@@ -94,9 +95,15 @@ check('Read-aloud never falls back to the engine default voice', () => {
   assert.ok(provider.includes('setSupported(voiceRef.current !== null);'), 'supported no longer follows the chosen voice');
 });
 
-check('Voice selection keeps the on-device filter and drops the cloud bonus', () => {
+check('Read-aloud uses only the owner-approved voice, with no scoring fallback', () => {
+  // Google UK English Female is a cloud voice in desktop Chrome. Using it for
+  // read-aloud was approved by the project owner; no other voice may be picked.
   const speech = read('lib', 'speech.ts');
-  assert.ok(speech.includes('isOnDeviceVoice(voice)'), 'pickVoice no longer filters on-device voices');
+  assert.ok(
+    speech.includes("export const READ_ALOUD_VOICE = { name: 'Google UK English Female', lang: 'en-GB' } as const;"),
+    'the read-aloud voice changed'
+  );
+  assert.ok(speech.includes('return voices.find((voice) => isReadAloudVoice(voice)) ?? null;'), 'pickVoice is not exact-match only');
   assert.ok(!/localService === false\) score/.test(speech), 'a cloud voice bonus is back');
 });
 
