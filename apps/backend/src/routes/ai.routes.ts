@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { aiController } from '../controllers/ai.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
-import { aiRateLimiter } from '../middlewares/rate-limit.middleware.js';
+import { withAiAudience } from '../middlewares/ai-audience.middleware.js';
+import { aiDailyRateLimiter, aiRateLimiter } from '../middlewares/rate-limit.middleware.js';
 
 export const aiRouter = Router();
 
@@ -11,12 +12,12 @@ export const aiRouter = Router();
 // accepted an arbitrary questionId - so a student enrolled in any one course
 // could read any question in the database. That route is gone rather than
 // patched, so nothing can keep calling the old contract by accident.
-aiRouter.post('/quiz/hint', authenticate, aiRateLimiter, (req, res, next) => {
+aiRouter.post('/quiz/hint', authenticate, aiRateLimiter, aiDailyRateLimiter, withAiAudience, (req, res, next) => {
   aiController.streamQuizHint(req, res, next);
 });
 
 // Diagnostic mistake analysis for completed quiz attempt
-aiRouter.post('/quiz/mistake-analysis', authenticate, aiRateLimiter, (req, res, next) => {
+aiRouter.post('/quiz/mistake-analysis', authenticate, aiRateLimiter, withAiAudience, (req, res, next) => {
   aiController.analyzeMistakes(req, res, next);
 });
 

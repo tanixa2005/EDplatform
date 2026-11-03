@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, ImagePlus, Loader2, Mic, Square, X } from 'lucide-react';
 import { useSpeech } from '@/context/speech-context';
 import { isVoiceInputAllowed, useAiStatus } from '@/lib/ai-status';
-import { listenButtonLabel, mergeTranscript } from '@/lib/speech';
+import { VOICE_INPUT_DISCLOSURE, listenButtonLabel, mergeTranscript } from '@/lib/speech';
 import { useSpeechInput } from '@/lib/use-speech-input';
 
 interface AskBarProps {
@@ -49,6 +49,13 @@ function formatSize(bytes: number): string {
  * The photo is never stored: it is held in component state, sent with the turn,
  * and dropped. The object URL behind the preview is revoked when it changes.
  */
+/**
+ * Whether the student has agreed to VOICE_INPUT_DISCLOSURE in this page load.
+ * Module-level so every composer on the screen shares one answer; a reload
+ * asks again. The browser's own microphone prompt still follows on first use.
+ */
+let voiceConsentGiven = false;
+
 export function AskBar({
   onSubmit,
   placeholder = 'Ask me anything…',
@@ -60,6 +67,7 @@ export function AskBar({
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [askingVoiceConsent, setAskingVoiceConsent] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -111,11 +119,29 @@ export function AskBar({
       );
       return;
     }
+    // Nothing is opened until the student has read where their voice goes and
+    // agreed. Only then does start() run, which is when the browser asks for
+    // microphone permission itself.
+    if (!voiceConsentGiven) {
+      setNotice(null);
+      setAskingVoiceConsent(true);
+      return;
+    }
+    beginListening();
+  }
+
+  function beginListening() {
     // ED talking into an open microphone would be transcribed back as the
     // student's question.
     stopSpeaking();
     setNotice(null);
     listen.start();
+  }
+
+  function acceptVoiceConsent() {
+    voiceConsentGiven = true;
+    setAskingVoiceConsent(false);
+    beginListening();
   }
 
   // One object URL at a time, always revoked. Without this, every replaced
@@ -303,6 +329,33 @@ export function AskBar({
           </button>
         </div>
       </div>
+
+      {/* Shown on the first mic press, before any audio is captured. */}
+      {voiceAllowed && askingVoiceConsent && (
+        <div
+          role="dialog"
+          aria-label="Before you speak"
+          className="mt-2 rounded-lg bg-secondary px-3 py-2 text-sm text-foreground"
+        >
+          <p>{VOICE_INPUT_DISCLOSURE}</p>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              onClick={acceptVoiceConsent}
+              className="rounded-lg bg-solid px-3 py-1.5 font-medium text-solid-foreground hover:bg-solid-hover"
+            >
+              Allow microphone
+            </button>
+            <button
+              type="button"
+              onClick={() => setAskingVoiceConsent(false)}
+              className="font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Listening and processing are announced, not just coloured: a student
           needs to know the microphone is open, and a screen reader gets no

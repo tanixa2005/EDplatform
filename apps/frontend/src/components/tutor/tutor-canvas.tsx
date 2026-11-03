@@ -59,6 +59,9 @@ export function TutorCanvas({ sessionId, initialMessage }: TutorCanvasProps) {
   // Guards the initial message against React Strict Mode's double effect run,
   // which would otherwise send the student's first question twice.
   const initialSentRef = useRef(false);
+  // Set synchronously when a turn starts. `isStreaming` is React state, so two
+  // clicks inside one render both still see it as false; a ref does not.
+  const sendingRef = useRef(false);
 
   const isStreaming = streamingText !== null;
 
@@ -110,7 +113,8 @@ export function TutorCanvas({ sessionId, initialMessage }: TutorCanvasProps) {
       payload: { message?: string; action?: TutorQuickAction },
       image?: File | null
     ) => {
-      if (isStreaming) return;
+      if (isStreaming || sendingRef.current) return;
+      sendingRef.current = true;
 
       const optimisticText =
         payload.message ??
@@ -165,6 +169,7 @@ export function TutorCanvas({ sessionId, initialMessage }: TutorCanvasProps) {
         // failure message, or the student is left staring at their own question
         // with nothing after it.
         await loadSession({ preserveError: turnFailed });
+        sendingRef.current = false;
       }
     },
     [isStreaming, sessionId, loadSession]

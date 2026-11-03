@@ -441,11 +441,12 @@ async function runAll(): Promise<void> {
     assert.match(source, /function assertExternalAiAllowed\(\): void \{\s*if \(!isExternalAiAllowed\(\)\) throw aiPausedError\(\);/);
   });
 
-  await check('The factory picks the disabled provider before it can create the OpenRouter client', () => {
+  await check('The factory picks the disabled provider before it can create any external client', () => {
     const factory = readFileSync(path.join(SRC, 'services', 'ai', 'provider.factory.ts'), 'utf8');
-    const disabled = factory.indexOf('if (!isExternalAiAllowed()) {');
+    const disabled = factory.indexOf("if (resolveAiTutorMode(env.AI_TUTOR_MODE) !== 'live') {");
     const openRouter = factory.indexOf('new OpenRouterAITutorProvider(');
-    assert.ok(disabled > 0 && openRouter > disabled, 'the disabled branch does not come first');
+    const gemini = factory.indexOf('new GeminiAITutorProvider(');
+    assert.ok(disabled > 0 && openRouter > disabled && gemini > disabled, 'the disabled branch does not come first');
   });
 
   await check('The disabled provider has no network code', () => {
@@ -453,13 +454,20 @@ async function runAll(): Promise<void> {
     assert.ok(!/fetch|https?:\/\/|import\s.*openrouter/i.test(code));
   });
 
-  await check('Gemini and every other AI SDK are unreachable', () => {
+  await check('Gemini is reachable only through the factory, and no other AI SDK is used', () => {
     const geminiImporters = files.filter((f) => /from\s+['"][^'"]*gemini\.provider/.test(codeOf(f))).map(rel);
-    assert.deepEqual(geminiImporters, [], 'the Gemini provider is imported');
+    assert.deepEqual(geminiImporters, ['services/ai/provider.factory.ts'], 'the Gemini provider is imported elsewhere');
+    const geminiSource = readFileSync(path.join(SRC, 'services', 'ai', 'gemini.provider.ts'), 'utf8');
+    for (const method of ['generateStream(params: StreamParams): Promise<string> {', 'generateStructured<T>(params: StructuredParams<T>): Promise<T> {']) {
+      const at = geminiSource.indexOf(method);
+      assert.ok(at >= 0, `${method} not found`);
+      const body = geminiSource.slice(at + method.length, at + method.length + 400);
+      assert.match(body, /if \(!isExternalAiAllowed\(\)\) throw aiPausedError\(\);/, `${method} lacks the guard`);
+    }
     const sdkImporters = files
       .filter((f) => /from\s+['"](@google\/genai|@google\/generative-ai|openai|@anthropic-ai\/[^'"]+|groq-sdk|cohere-ai|@mistralai\/[^'"]+)['"]/.test(codeOf(f)))
       .map(rel);
-    assert.deepEqual(sdkImporters, ['services/ai/gemini.provider.ts'], 'an AI SDK is imported outside the dead Gemini file');
+    assert.deepEqual(sdkImporters, ['services/ai/gemini.provider.ts'], 'an AI SDK is imported outside the Gemini provider');
   });
 
   // ------------------------------------------------------------------------

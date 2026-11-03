@@ -39,6 +39,9 @@ export interface PreparedQuizHint {
   meta: StreamMeta;
 }
 
+/** Analyses currently being produced, keyed by student and attempt. */
+const inFlightAnalyses = new Map<string, Promise<QuizMistakeAnalysisResult>>();
+
 export class AITutorService {
 
   /**
@@ -369,9 +372,29 @@ export class AITutorService {
   }
 
   /**
-   * Analyze student mistakes on a completed quiz attempt
+   * Analyze student mistakes on a completed quiz attempt.
+   *
+   * Concurrent requests from the same student for the same attempt share one
+   * run. Opening the analysis twice in quick succession (or a double-mounted
+   * component) would otherwise make two generations before the first one is
+   * cached. Every check still runs once, for that one run, and only the same
+   * student can share it.
    */
   public async analyzeQuizMistakes(
+    user: SafeUser,
+    attemptId: string
+  ): Promise<QuizMistakeAnalysisResult> {
+    const key = `${user.id}:${attemptId}`;
+    const pending = inFlightAnalyses.get(key);
+    if (pending) return pending;
+    const run = this.analyzeQuizMistakesOnce(user, attemptId).finally(() => {
+      inFlightAnalyses.delete(key);
+    });
+    inFlightAnalyses.set(key, run);
+    return run;
+  }
+
+  private async analyzeQuizMistakesOnce(
     user: SafeUser,
     attemptId: string
   ): Promise<QuizMistakeAnalysisResult> {

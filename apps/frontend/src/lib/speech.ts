@@ -511,6 +511,14 @@ export function mergeTranscript(existing: string, transcript: string): string {
     : `${current} ${addition}`;
 }
 
+/**
+ * What the student is told before the microphone is first opened, and agrees
+ * to. Accurate on purpose: recognition is NOT on-device. Chrome sends the audio
+ * to Google's speech service and Edge to Microsoft's.
+ */
+export const VOICE_INPUT_DISCLOSURE =
+  "Speaking uses your browser's speech service, not this device: Chrome sends your voice to Google and Edge sends it to Microsoft to turn it into text. You can check and edit the words before you send them.";
+
 /** Label for the mic control, kept beside the state it renders from. */
 export function listenButtonLabel(state: ListenState, supported: boolean): string {
   if (!supported) return 'Speech input is not available in this browser';

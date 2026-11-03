@@ -150,6 +150,7 @@ async function runAll(): Promise<void> {
   const { OpenRouterAITutorProvider, isFreeVisionRoute } = await import('../services/ai/openrouter.provider.js');
   const factory = await import('../services/ai/provider.factory.js');
   const {
+    AI_QUOTA_MESSAGE,
     AI_RETRY,
     AI_UNAVAILABLE_MESSAGE,
     isTransientProviderError,
@@ -245,11 +246,14 @@ async function runAll(): Promise<void> {
     assert.equal(isTransientProviderError(err), false);
   });
 
-  await check('A live daily-quota turn makes exactly one request and shows only the safe sentence', async () => {
+  await check('A live daily-quota turn makes exactly one request and shows only the safe quota sentence', async () => {
     const out = await withScript([{ status: 429, body: dailyQuotaBody() }], turn);
     assert.equal(out.requests.length, 1, `made ${out.requests.length} requests`);
     assert.ok(out.error, 'the turn did not fail');
-    assert.equal((out.error as Error).message, AI_UNAVAILABLE_MESSAGE);
+    // The account's own quota is used up: the friendly quota sentence, not
+    // "try again in a moment", which would send the student straight back.
+    assert.equal((out.error as Error).message, AI_QUOTA_MESSAGE);
+    assert.equal((out.error as { code?: string }).code, 'AI_QUOTA_EXHAUSTED');
     assert.match(out.logged, /status=429/);
     assert.match(out.logged, /reason=daily_quota/);
     assert.match(out.logged, /ratelimit_remaining=0/);

@@ -76,6 +76,23 @@ export const aiRateLimiter = createRateLimiter({
   message: 'AI Tutor rate limit exceeded (20 requests/minute). Please wait a moment before sending another query.',
 });
 
+/**
+ * Per-student daily ceiling on AI generations (tutor turns and quiz hints).
+ *
+ * The free AI quota belongs to the whole project, so one student asking
+ * hundreds of questions could use up everyone's. 60 a day is several full
+ * study sessions. In memory and per process, like the limiter above; it resets
+ * when the server restarts.
+ */
+export const AI_DAILY_REQUESTS_PER_STUDENT = 60;
+
+export const aiDailyRateLimiter = createRateLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  maxRequests: AI_DAILY_REQUESTS_PER_STUDENT,
+  message:
+    "You've asked ED a lot of questions today. Your lessons and quizzes still work, so try ED again tomorrow.",
+});
+
 // Authentication rate limiter: 15 requests per 15 minutes (brute-force protection)
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,

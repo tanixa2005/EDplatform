@@ -129,6 +129,29 @@ Two PDFs, both "last updated 20 August 2026", read in full and linked from OpenR
 - **Privacy notice, section 5.** Data is kept for as long as reasonably necessary. No fixed period is given.
 - **Privacy notice, section 8.** The service is not intended for or directed at children under 13.
 
+### 3.4 Google: the direct Gemini API (prepared, not approved)
+
+A direct Gemini API provider (first prepared on `feat/gemini-direct`) is selected only by `AI_PROVIDER=gemini`. These facts were re-checked on 24 October 2026:
+
+- **Model chosen: `gemini-3.5-flash-lite`, a Gemini model, not Gemma.** The only alternative allowed is `gemini-3.8-flash`. Any other value of `GEMINI_MODEL` refuses startup, including Gemma models, Gemini 2.5 models, TTS, image and live variants, and models with no free tier.
+  - **Status.** The models and deprecations pages (both updated 22 October 2026) list `gemini-3.5-flash-lite` with a release date of 21 July 2026 and no shutdown date announced. They name "3.5 Flash-Lite or 3.8 Flash" as the models for new projects.
+  - **Thinking.** The thinking page (updated 14 October 2026) gives its default as minimal, with minimal through high supported. `gemini-3.8-flash` supports low, medium and high only. The provider always sends each model's lowest level. Google says the output cap counts thinking tokens.
+- **Why not `gemini-2.5-flash`.** It is "not deprecated" and has no shutdown date. But Google says access to the 2.5 models is limited to users who have actively used them in the past, and directs new projects to the models above. A new key is therefore unlikely to reach it.
+- **Pricing.** The pricing page (updated 22 October 2026) lists `gemini-3.5-flash-lite` as "Free of charge" for input and output on the free tier.
+  - Unlike Gemma 4, it **has a paid tier**: $0.30 per million input tokens and $2.50 per million output tokens.
+  - With no billing enabled, a request over quota is refused, not charged. **If billing is ever enabled on the project, usage beyond the free tier would be billed.**
+- **Data use.** On the free tier, "used to improve our products" is Yes. The same unpaid-service, human-review and 55-day abuse-monitoring terms in 3.2 apply.
+- **Rate limits.**
+  - The rate-limits page (updated 15 October 2026) says limits apply per project, not per API key, and that free-tier capacity is not guaranteed.
+  - Active limits are shown only in AI Studio. **The free-tier per-minute and per-day numbers for these models are not published on the page and were not verified.** The page shows only paid-tier batch figures.
+  - A new key in the same project shares the same quota, and caching does not raise it.
+- **Region.** India is on the list of available regions (page updated 28 April 2026).
+- **Terms: a blocker for student traffic.** With a direct key, EDplatform itself accepts the Gemini API Additional Terms, effective 23 March 2026, and the Age Requirements section applies directly:
+  - users must be 18 or older;
+  - the API may not be used in a service directed towards, or likely to be accessed by, people under 18.
+
+  Unlike the OpenRouter route, there is no question of whose terms apply. **The provider is therefore left disabled:** `AI_PROVIDER` is not set in any environment. It is not to be enabled for real student traffic unless a qualified reviewer concludes the use is permitted.
+
 ## 4. Technical findings and inferences
 
 - **Technical finding: pausing stops every external AI request.**
@@ -138,6 +161,49 @@ Two PDFs, both "last updated 20 August 2026", read in full and linked from OpenR
 - **Technical finding: the zero-price cap is untested.** Every fallback request would carry `provider.max_price = 0`, but it has not been tested live, and the docs do not say whether 0 is accepted.
 - **Inference: this account probably allows training on free models.** OpenRouter's FAQ says providers that log or train are not used unless the account's training toggle is on. Gemma's only endpoint is Google's free tier, which uses content to improve products. Gemma requests do route (production logs, 22 October 2026). So the account's free-model training toggle is probably on. This was not checked in the account settings.
 - **Inference: Google's limits apply to OpenRouter, not us.** Requests go through OpenRouter's Google account, so Google's own free-tier limits apply to OpenRouter's shared capacity. That matches the `upstream_rate_limited` failures seen in production.
+
+### 3.5 Adult-only gate for the project-team demonstration (decision of 1 November 2026)
+
+The owner chose to run live Gemini only for authorised adult project-team accounts, not for students, because of the age terms in 3.4. Rechecked on 1 November 2026: the terms are unchanged (effective 23 March 2026, last updated 28 April 2026). The key runs on the **free tier**, so Google may use prompts and replies to improve its products and human reviewers may read them; nothing personal should be typed or photographed in the demonstration.
+
+- `AI_TUTOR_MODE=live` with `AI_PROVIDER=gemini` serves Gemini only to the emails in `AI_LIVE_ALLOWED_EMAILS` (comma-separated, case-insensitive). Every other account, and any request without a known account, is answered exactly as when paused: the pause message, the local quiz analysis, and no microphone.
+- An empty list means nobody. The check is made per request (`ai-audience.ts`, `withAiAudience` on the status, tutor-turn, quiz-hint and quiz-analysis routes) and again inside the Gemini provider before anything is sent.
+- The microphone is offered only when the backend reports `voiceInputAllowed: true`, which now also requires an allowlisted account. Before the first use the student is told that the browser sends their voice to Google (Chrome) or Microsoft (Edge) and must press "Allow microphone"; the browser's own permission prompt follows.
+- This does not make student use compliant. Adding a student's email to the list would breach the terms in 3.4.
+
+### 4.1 AI usage safeguards (branch `feat/gemini-direct`; technical findings)
+
+These keep the direct Gemini integration inside the free quota. Each is covered by `npm run test:gemini` unless noted.
+
+| Safeguard | Where | What it does |
+|---|---|---|
+| Explicit provider | `provider.factory.ts`, `env.config.ts` | Gemini is used only when `AI_PROVIDER=gemini`. It never falls back to OpenRouter or another model, and makes no second Gemini request as a fallback. |
+| Gemini-only allowlist | `config/gemini-models.ts` | `gemini-3.5-flash-lite` (default) or `gemini-3.8-flash`. Startup refuses anything else (Gemma, 2.5, TTS, image, live), and so does the provider. |
+| Output and thinking limits | `config/gemini-models.ts` | 1,024 output tokens per tutor reply and 2,048 per analysis (thinking included), at minimal thinking. `gemini-3.8-flash` gets 2,048 / 3,072 at low thinking, its lowest level. |
+| Bounded history | `history-budget.ts` | Sends about the last 8,000 characters of whole messages, up to 12. |
+| Bounded retries | `provider.factory.ts` | At most 3 attempts per turn. No retry for daily quota, permanent errors (400–404), refusals, or anything after text has streamed. Google's retry delay is honoured only up to 8 seconds. SDK retries are pinned off. |
+| Quota message | `provider.factory.ts` | Quota exhaustion shows a friendly message (`AI_QUOTA_EXHAUSTED`), not "try again in a moment". |
+| One request in flight | `ai-request-guard.ts`, controllers | One tutor turn per session and one quiz hint per student at a time. Duplicates get a 409 before anything is stored or sent. |
+| Shared analysis run | `ai-tutor.service.ts` | Simultaneous requests for the same analysis share one call. A successful analysis is cached on the attempt and reused. |
+| No AI where none is needed | `ai-tutor.service.ts` | A perfect score and a cached analysis make no call. The pause switch serves the local analysis. |
+| Daily cap | `rate-limit.middleware.ts` | 60 tutor turns plus hints per student, on top of the existing 20-per-minute limit. |
+| Frontend guards | `tutor-canvas.tsx`, `quiz-hint-panel.tsx`, `mistake-analysis-modal.tsx` | Stop double-clicks and repeated effects from sending twice. These are not covered by automated tests; the frontend has no component test setup. |
+| Pause switch | `ai-availability.ts` | `AI_TUTOR_MODE=paused` stops every external AI request (`npm run test:ai-pause`). |
+
+**Limitations of the in-memory safeguards.** The daily cap, the per-minute limit, the in-flight locks and the shared analysis runs are held in the server's memory:
+
+- **They reset when the server restarts.** A restart clears every count and lock, so a student can make up to another 60 requests.
+  - Render's free instance spins down after inactivity, and the dashboard warns that it does. Each spin-down is a restart.
+  - Abandoned locks also clear by themselves after 3 minutes.
+- **They are not shared between server instances.** With more than one backend instance, each instance counts separately.
+- **The daily cap is a rolling 24 hours from a student's first request,** not a calendar day. Google's own per-day quota resets at midnight Pacific time.
+- **The cap counts requests that reach the route,** including ones then refused as paused or busy, or that failed upstream.
+
+None of these raise Google's project quota. They only spread it more fairly and avoid wasting it. A durable, shared counter would need a database or cache, which is a separate decision.
+
+**Cached analysis after a failure (existing behaviour).** If the AI analysis fails, the local analysis is stored as that attempt's result and reused. That saves calls, but the attempt never gets an AI analysis afterwards.
+
+**The terms blocker is unchanged** (3.4): the direct Gemini provider must stay disabled for real student traffic until a qualified review resolves the age and privacy terms.
 
 ## 5. Unresolved or unverified
 
@@ -179,6 +245,11 @@ Two PDFs, both "last updated 20 August 2026", read in full and linked from OpenR
 | Gemini API Additional Terms of Service | Effective 23 Mar 2026; page updated 28 Apr 2026 | https://ai.google.dev/gemini-api/terms |
 | Gemini API pricing | Not recorded | https://ai.google.dev/gemini-api/docs/pricing |
 | Gemini API usage policies (abuse monitoring) | Page updated 9 Jun 2026 | https://ai.google.dev/gemini-api/docs/usage-policies |
+| Gemini API rate limits | Page updated 15 Oct 2026 | https://ai.google.dev/gemini-api/docs/rate-limits |
+| Gemini API available regions | Page updated 28 Apr 2026 | https://ai.google.dev/gemini-api/docs/available-regions |
+| Gemini API models | Page updated 22 Oct 2026 | https://ai.google.dev/gemini-api/docs/models |
+| Gemini API deprecations | Page updated 22 Oct 2026 | https://ai.google.dev/gemini-api/docs/deprecations |
+| Gemini API thinking | Page updated 14 Oct 2026 | https://ai.google.dev/gemini-api/docs/thinking |
 | Gemma Terms of Use | Last modified 1 Apr 2026 | https://ai.google.dev/gemma/terms |
 | Gemma Prohibited Use Policy | Last modified 21 Feb 2024 | https://ai.google.dev/gemma/prohibited_use_policy |
 | Google Cloud Terms of Service | Last modified 12 Oct 2026 | https://cloud.google.com/terms/ |

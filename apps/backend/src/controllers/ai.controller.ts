@@ -6,6 +6,7 @@ import {
   quizMistakeAnalysisInputSchema,
 } from '@edplatform/shared';
 import { aiTutorService } from '../services/ai/ai-tutor.service.js';
+import { aiBusyError, tryAcquireAiSlot } from '../services/ai/ai-request-guard.js';
 import { AppError, UnauthorizedError } from '../errors/app.error.js';
 
 /**
@@ -28,6 +29,7 @@ export class AIController {
    * POST /api/v1/ai/quiz/hint
    */
   public async streamQuizHint(req: Request, res: Response, next: NextFunction): Promise<void> {
+    let releaseSlot: (() => void) | null = null;
     try {
       if (!req.user) {
         throw new UnauthorizedError('Authentication required to use the AI Tutor');
@@ -41,6 +43,11 @@ export class AIController {
       // Authorise BEFORE the stream opens, so a refusal arrives as a real HTTP
       // status the client can act on rather than a 200 carrying an error frame.
       const prepared = await aiTutorService.prepareQuizHint(req.user, input);
+
+      // One hint at a time per student, refused before the stream opens and
+      // before any AI call, so a double-click cannot become two generations.
+      releaseSlot = tryAcquireAiSlot(`quiz-hint:${req.user.id}`);
+      if (!releaseSlot) throw aiBusyError();
 
       // Initialize Server-Sent Events headers
       res.writeHead(200, {
@@ -83,6 +90,8 @@ export class AIController {
       } else {
         next(error);
       }
+    } finally {
+      releaseSlot?.();
     }
   }
 

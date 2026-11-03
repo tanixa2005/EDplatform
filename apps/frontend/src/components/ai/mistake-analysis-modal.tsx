@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -40,6 +40,12 @@ export function MistakeAnalysisModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Which attempt the loaded analysis belongs to, and whether a request is
+  // already out. Reopening the modal reuses the analysis already on screen,
+  // and a double-mounted effect cannot send a second request.
+  const loadedForRef = useRef<string | null>(null);
+  const loadingRef = useRef(false);
+
   useEffect(() => {
     if (isOpen && attemptId) {
       loadAnalysis();
@@ -47,6 +53,8 @@ export function MistakeAnalysisModal({
   }, [isOpen, attemptId]);
 
   const loadAnalysis = async () => {
+    if (loadingRef.current || loadedForRef.current === attemptId) return;
+    loadingRef.current = true;
     try {
       setIsLoading(true);
       setError(null);
@@ -60,11 +68,13 @@ export function MistakeAnalysisModal({
       );
 
       setAnalysis(data);
+      loadedForRef.current = attemptId;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to analyze quiz mistakes';
       setError(message);
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
   };
 
