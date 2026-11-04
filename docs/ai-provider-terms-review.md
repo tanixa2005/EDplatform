@@ -162,14 +162,18 @@ A direct Gemini API provider (first prepared on `feat/gemini-direct`) is selecte
 - **Inference: this account probably allows training on free models.** OpenRouter's FAQ says providers that log or train are not used unless the account's training toggle is on. Gemma's only endpoint is Google's free tier, which uses content to improve products. Gemma requests do route (production logs, 22 October 2026). So the account's free-model training toggle is probably on. This was not checked in the account settings.
 - **Inference: Google's limits apply to OpenRouter, not us.** Requests go through OpenRouter's Google account, so Google's own free-tier limits apply to OpenRouter's shared capacity. That matches the `upstream_rate_limited` failures seen in production.
 
-### 3.5 Adult-only gate for the project-team demonstration (decision of 1 November 2026)
+### 3.5 Adult-only gate for the project-team demonstration (decision of 1 November 2026, superseded)
 
-The owner chose to run live Gemini only for authorised adult project-team accounts, not for students, because of the age terms in 3.4. Rechecked on 1 November 2026: the terms are unchanged (effective 23 March 2026, last updated 28 April 2026). The key runs on the **free tier**, so Google may use prompts and replies to improve its products and human reviewers may read them; nothing personal should be typed or photographed in the demonstration.
+The owner first chose to run live Gemini only for adult project-team emails listed in an environment variable, because of the age terms in 3.4. Replaced on 4 November 2026 by 3.6; the email list no longer exists.
 
-- `AI_TUTOR_MODE=live` with `AI_PROVIDER=gemini` serves Gemini only to the emails in `AI_LIVE_ALLOWED_EMAILS` (comma-separated, case-insensitive). Every other account, and any request without a known account, is answered exactly as when paused: the pause message, the local quiz analysis, and no microphone.
-- An empty list means nobody. The check is made per request (`ai-audience.ts`, `withAiAudience` on the status, tutor-turn, quiz-hint and quiz-analysis routes) and again inside the Gemini provider before anything is sent.
-- The microphone is offered only when the backend reports `voiceInputAllowed: true`, which now also requires an allowlisted account. Before the first use the student is told that the browser sends their voice to Google (Chrome) or Microsoft (Edge) and must press "Allow microphone"; the browser's own permission prompt follows.
-- This does not make student use compliant. Adding a student's email to the list would breach the terms in 3.4.
+### 3.6 Gemini for any signed-in account (decision of 4 November 2026)
+
+The owner decided there are no separate project-team accounts and no maintained email list. Project-team members sign in with their own personal emails through the normal EDplatform sign-in, and **no real school students will log in or use the application**. The key runs on the **free tier**, so Google may use prompts and replies to improve its products and human reviewers may read them; nothing personal should be typed or photographed.
+
+- `AI_TUTOR_MODE=live` with `AI_PROVIDER=gemini` serves Gemini to any authenticated EDplatform account. Render needs only `GEMINI_API_KEY`, `AI_PROVIDER=gemini`, `GEMINI_MODEL=gemini-3.5-flash-lite` and `AI_TUTOR_MODE=live`.
+- Anonymous visitors never reach Gemini. Every AI route (tutor status, tutor chat and streaming including photo questions, quiz hints, quiz analysis) runs `authenticate` first and answers 401 without an account. Behind that, `withAiAudience` records the signed-in account and the availability check, also run inside the Gemini provider, treats a request with no account (or no request at all) as paused.
+- The microphone is offered only when the backend reports `voiceInputAllowed: true`, which requires a signed-in account. Before the first use the user is told that the browser sends their voice to Google (Chrome) or Microsoft (Edge) and must press "Allow microphone"; the browser's own permission prompt follows.
+- **Not a technical age control.** Public sign-up is open, so anyone who creates an account gets live Gemini. Keeping students off the deployment rests on the owner's decision that it is not given to students. If students are ever invited, live Gemini must be turned off first (`AI_TUTOR_MODE=paused` or `mock`); the terms in 3.4 still apply.
 
 ### 4.1 AI usage safeguards (branch `feat/gemini-direct`; technical findings)
 

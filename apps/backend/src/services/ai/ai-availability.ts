@@ -1,7 +1,7 @@
 import { env } from '../../config/env.config.js';
 import { resolveAiTutorMode } from '../../config/ai-mode.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
-import { isCurrentAudienceAllowed } from './ai-audience.js';
+import { isCurrentAudienceAuthenticated } from './ai-audience.js';
 
 /**
  * Whether ED may contact an external AI provider at all.
@@ -58,13 +58,13 @@ export function isExternalAiAllowed(): boolean {
 }
 
 /**
- * Live Gemini is for the adult accounts in AI_LIVE_ALLOWED_EMAILS only (see
- * ai-audience.ts): for anyone else, and outside a request, live mode behaves
- * as paused. Only AI_PROVIDER=gemini is gated.
+ * Live Gemini is for signed-in accounts only (see ai-audience.ts): with no
+ * authenticated account, and outside a request, live mode behaves as paused.
+ * Only AI_PROVIDER=gemini is gated.
  */
 function isGeminiAudienceRefused(): boolean {
   if (env.AI_PROVIDER !== 'gemini') return false;
-  return !isCurrentAudienceAllowed(env.AI_LIVE_ALLOWED_EMAILS);
+  return !isCurrentAudienceAuthenticated();
 }
 
 /**

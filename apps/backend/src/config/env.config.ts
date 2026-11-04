@@ -109,10 +109,6 @@ export const envSchema = z
     // a Gemma model, a 2.5 model, a TTS or image variant - refuses startup when
     // AI_PROVIDER is 'gemini'.
     GEMINI_MODEL: z.string().optional().default(DEFAULT_GEMINI_MODEL),
-    // The adult accounts (comma-separated emails) that live Gemini is served
-    // to. Everyone else is answered as when paused. Empty means nobody - see
-    // services/ai/ai-audience.ts. Not a secret, but never sent to the client.
-    AI_LIVE_ALLOWED_EMAILS: z.string().optional().default(''),
 
     // Clerk. Optional so the app still boots (and builds) without them during
     // the migration; requests then fall back to the legacy JWT cookie.
