@@ -52,6 +52,8 @@ interface Recorded {
   body: Record<string, unknown> | null;
 }
 
+/** The real fetch, kept for calling the local test server once fetch is scripted. */
+const realFetch = globalThis.fetch;
 const requests: Recorded[] = [];
 /** Every request of the whole run, never reset - for the "no Gemma, ever" check. */
 const allRequests: Recorded[] = [];
@@ -150,9 +152,8 @@ async function runAll(): Promise<void> {
   delete process.env.AI_PROVIDER;
   // Live with no keys: the factory builds the Mock, so nothing real exists,
   // and Gemini is swapped in below. AI_PROVIDER stays unset here so the
-  // adult-only gate is off for these provider checks; section [A] tests it.
+  // signed-in-account gate is off for these provider checks; section [A] tests it.
   process.env.AI_TUTOR_MODE = 'live';
-  process.env.AI_LIVE_ALLOWED_EMAILS = '';
   process.env.OFFLINE_DEMO_AI = 'false';
   process.env.NODE_ENV = 'test';
   installFetch();
@@ -859,67 +860,100 @@ async function runAll(): Promise<void> {
   });
 
   // -------------------------------------------------------------------------
-  console.log('\n[A] Adult-only gate: live Gemini only for AI_LIVE_ALLOWED_EMAILS');
+  console.log('\n[A] Signed-in gate: live Gemini for any authenticated account, never anonymous');
 
   const availability = await import('../services/ai/ai-availability.js');
-  const { runWithAiAudience, parseAllowedEmails } = await import('../services/ai/ai-audience.js');
-  const mutableEnv = env as { AI_PROVIDER?: string; AI_LIVE_ALLOWED_EMAILS: string; AI_TUTOR_MODE: string };
+  const { runWithAiAudience } = await import('../services/ai/ai-audience.js');
+  const mutableEnv = env as { AI_PROVIDER?: string; AI_TUTOR_MODE: string };
   const savedGate = { ...mutableEnv };
-  const ADULT = 'Adult.Lead@Team.test';
   mutableEnv.AI_TUTOR_MODE = 'live';
   mutableEnv.AI_PROVIDER = 'gemini';
-  mutableEnv.AI_LIVE_ALLOWED_EMAILS = ` ${ADULT.toLowerCase()} , other.adult@team.test,, `;
 
-  await check('The allowlist is comma-separated, trimmed and case-insensitive', () => {
-    assert.deepEqual([...parseAllowedEmails(' A@x.test ,,b@X.test ')], ['a@x.test', 'b@x.test']);
-    assert.equal(parseAllowedEmails('').size, 0);
+  await check('There is no email allowlist setting any more', () => {
+    assert.equal('AI_LIVE_ALLOWED_EMAILS' in env, false);
   });
   await check('Outside a request nobody is allowed: paused, no external AI, no mic', () => {
     assert.equal(availability.isAiTutorPaused(), true);
     assert.equal(availability.isExternalAiAllowed(), false);
     assert.deepEqual(availability.aiClientStatus(), { tutorPaused: true, voiceInputAllowed: false });
   });
-  await check('A student account not on the list is paused, gets no mic, and sends nothing', async () => {
-    await runWithAiAudience('student@school.test', async () => {
-      assert.deepEqual(availability.aiClientStatus(), { tutorPaused: true, voiceInputAllowed: false });
-      reset([sse('should not be sent')]);
-      const out = await quietly(() => turn());
-      assert.equal((out.error as Error).message, AI_PAUSED_MESSAGE);
-      assert.equal(googleCalls(), 0);
+  for (const anonymous of [null, undefined, '', '   ']) {
+    await check(`A request with no account (${JSON.stringify(anonymous)}) is paused and sends nothing`, async () => {
+      await runWithAiAudience(anonymous, async () => {
+        assert.deepEqual(availability.aiClientStatus(), { tutorPaused: true, voiceInputAllowed: false });
+        reset([sse('should not be sent')]);
+        const out = await quietly(() => turn());
+        assert.equal((out.error as Error).message, AI_PAUSED_MESSAGE);
+        assert.equal(googleCalls(), 0);
+      });
     });
-  });
-  await check('Calling the Gemini provider directly for a non-listed account sends nothing', async () => {
-    await runWithAiAudience('student@school.test', async () => {
+  }
+  await check('Calling the Gemini provider directly with no account sends nothing', async () => {
+    await runWithAiAudience(null, async () => {
       reset([sse('should not be sent')]);
       const out = await quietly(() => gemini.generateStream({ systemPrompt: SYSTEM_PROMPT, userPrompt: 'x', onChunk: () => {} }));
       assert.equal((out.error as Error).message, AI_PAUSED_MESSAGE);
       assert.equal(googleCalls(), 0);
     });
   });
-  await check('An allowlisted adult (any case) gets live Gemini and the mic', async () => {
-    await runWithAiAudience(ADULT, async () => {
-      assert.deepEqual(availability.aiClientStatus(), { tutorPaused: false, voiceInputAllowed: true });
-      reset([sse('Hello ', 'adult.')]);
-      const out = await quietly(() => turn());
-      assert.equal(out.error, null, String(out.error));
-      assert.equal(out.result, 'Hello adult.');
-      assert.equal(googleCalls(), 1);
-      assert.equal(nonGoogleCalls().length, 0);
+  for (const userId of ['user-team-member-1', 'user-any-other-account']) {
+    await check(`Any signed-in account (${userId}) gets live Gemini and the mic, with no list to be on`, async () => {
+      await runWithAiAudience(userId, async () => {
+        assert.deepEqual(availability.aiClientStatus(), { tutorPaused: false, voiceInputAllowed: true });
+        reset([sse('Hello ', 'there.')]);
+        const out = await quietly(() => turn());
+        assert.equal(out.error, null, String(out.error));
+        assert.equal(out.result, 'Hello there.');
+        assert.equal(googleCalls(), 1);
+        assert.equal(nonGoogleCalls().length, 0);
+      });
     });
-  });
-  await check('An empty allowlist means nobody, adults included', async () => {
-    mutableEnv.AI_LIVE_ALLOWED_EMAILS = '';
-    await runWithAiAudience(ADULT, async () => {
-      assert.deepEqual(availability.aiClientStatus(), { tutorPaused: true, voiceInputAllowed: false });
-    });
-  });
-  await check('Paused mode stays paused even for an allowlisted adult', async () => {
-    mutableEnv.AI_LIVE_ALLOWED_EMAILS = ADULT;
+  }
+  await check('Paused mode stays paused even for a signed-in account', async () => {
     mutableEnv.AI_TUTOR_MODE = 'paused';
-    await runWithAiAudience(ADULT, async () => {
+    await runWithAiAudience('user-team-member-1', async () => {
       assert.deepEqual(availability.aiClientStatus(), { tutorPaused: true, voiceInputAllowed: false });
     });
+    mutableEnv.AI_TUTOR_MODE = 'live';
   });
+
+  // Anonymous HTTP requests, live Gemini configured: every AI route answers
+  // 401 from authenticate, and nothing reaches Google.
+  const { createApp } = await import('../app.js');
+  const server = createApp().listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+  const address = server.address();
+  const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/api/v1`;
+  const photoForm = () => {
+    const form = new FormData();
+    form.append('message', 'What is this?');
+    form.append('image', new Blob([PNG], { type: 'image/png' }), 'q.png');
+    return form;
+  };
+  const json = (body: unknown): RequestInit => ({
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json' }
+  });
+  const anonymousCalls: Array<[string, string, () => RequestInit]> = [
+    ['tutor status', '/tutor/status', () => ({ method: 'GET' })],
+    ['tutor chat stream', '/tutor/sessions/session-1/stream', () => json({ message: 'hi' })],
+    ['photo question', '/tutor/sessions/session-1/stream', () => ({ method: 'POST', body: photoForm() })],
+    ['quiz hint', '/ai/quiz/hint', () => json({ attemptId: 'attempt-1', questionId: 'question-1' })],
+    ['quiz analysis', '/ai/quiz/mistake-analysis', () => json({ attemptId: 'attempt-1' })]
+  ];
+  try {
+    for (const [label, route, init] of anonymousCalls) {
+      await check(`Anonymous ${label} is refused with 401 and sends nothing to Gemini`, async () => {
+        reset([sse('should not be sent')]);
+        const res = await realFetch(`${base}${route}`, init());
+        assert.equal(res.status, 401, `${label}: ${res.status}`);
+        assert.equal(googleCalls(), 0);
+      });
+    }
+  } finally {
+    server.close();
+  }
   Object.assign(mutableEnv, savedGate);
   if (savedGate.AI_PROVIDER === undefined) delete mutableEnv.AI_PROVIDER;
 

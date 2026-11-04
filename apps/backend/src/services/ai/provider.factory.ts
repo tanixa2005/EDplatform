@@ -2,7 +2,6 @@ import { env } from '../../config/env.config.js';
 import { ServiceUnavailableError } from '../../errors/app.error.js';
 import type { IAITutorProvider, StreamParams } from './ai-provider.interface.js';
 import { aiPausedError, isAiTutorPaused, isMockTutorMode } from './ai-availability.js';
-import { parseAllowedEmails } from './ai-audience.js';
 import { resolveAiTutorMode } from '../../config/ai-mode.js';
 import { DisabledAITutorProvider } from './disabled.provider.js';
 import { MockAITutorProvider } from './mock.provider.js';
@@ -67,7 +66,7 @@ export const primaryProvider: IAITutorProvider = (() => {
     return mockProvider;
   }
   // The mode alone, not isExternalAiAllowed(): at startup there is no request
-  // audience, and the adult-only Gemini gate is applied per request instead.
+  // audience, and the signed-in-account Gemini gate is applied per request instead.
   if (resolveAiTutorMode(env.AI_TUTOR_MODE) !== 'live') {
     console.log('🤖 AI provider: disabled (AI_TUTOR_MODE is not live; no external AI client is created)');
     return new DisabledAITutorProvider();
@@ -102,9 +101,7 @@ if (resolveAiTutorMode(env.AI_TUTOR_MODE) === 'paused' && !env.OFFLINE_DEMO_AI) 
   // Logged at startup so the state of production is visible in one line.
   console.log('🤖 AI tutor: PAUSED by AI_TUTOR_MODE - no external AI requests will be made');
 } else if (primaryProvider.name === 'GeminiAITutorProvider') {
-  // A count only: the allowlisted emails are never logged.
-  const allowed = parseAllowedEmails(env.AI_LIVE_ALLOWED_EMAILS).size;
-  console.log(`🤖 AI tutor: live Gemini for ${allowed} allowlisted adult account(s); everyone else is paused`);
+  console.log('🤖 AI tutor: live Gemini for signed-in accounts only; anonymous requests are refused');
 }
 
 /**
